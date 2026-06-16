@@ -131,7 +131,7 @@ export function BetaModalProvider({ children }: { children: ReactNode }) {
               <DialogTitle className="font-display text-2xl mb-3">You're on the list.</DialogTitle>
               <DialogDescription className="text-base">
                 Thanks, {fullName.split(" ")[0] || "there"}. If you're among the first 100, your
-                100 free credits are reserved. We'll reach out on your phone number to add you to
+                50 free credits are reserved. We'll reach out on your phone number to add you to
                 the community.
               </DialogDescription>
               <Button
@@ -145,7 +145,7 @@ export function BetaModalProvider({ children }: { children: ReactNode }) {
             <>
               <DialogHeader>
                 <div className="inline-flex items-center gap-2 self-start rounded-full border border-foreground/15 bg-foreground/[0.03] px-3 py-1 text-xs font-mono text-foreground mb-2">
-                  🎉 First 100 beta users get 100 free credits
+                  🎉 First 100 beta users get 50 free credits
                 </div>
                 <DialogTitle className="font-display text-2xl">Join the beta</DialogTitle>
                 <DialogDescription>
