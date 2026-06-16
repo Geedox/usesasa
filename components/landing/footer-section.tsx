@@ -19,7 +19,7 @@ const footerLinks = {
   Company: [
     { name: "About", href: "#" },
     { name: "Blog", href: "#" },
-    { name: "Contact", href: "mailto:founders@usesasa.com" },
+    { name: "Contact", href: "mailto:founders@usesasa.xyz" },
     { name: "AI disclosure", href: "#" },
   ],
   Legal: [

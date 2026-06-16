@@ -1,8 +1,20 @@
 // Central place for site-wide SEO constants. Set NEXT_PUBLIC_SITE_URL in your
 // environment (Railway / Vercel) to your real domain so canonical + OG URLs are correct.
-export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "https://usesasa.com"
-).replace(/\/$/, "");
+// A bare domain (e.g. "usesasa.com" or "*.up.railway.app") is accepted and normalized —
+// it must never throw, because it feeds `new URL(...)` in metadataBase at build time.
+function resolveSiteUrl(): string {
+  const fallback = "https://usesasa.xyz";
+  let raw = (process.env.NEXT_PUBLIC_SITE_URL || "").trim();
+  if (!raw) return fallback;
+  if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return fallback;
+  }
+}
+
+export const SITE_URL = resolveSiteUrl();
 
 export const SITE_NAME = "Sasa";
 
@@ -26,4 +38,4 @@ export const SITE_KEYWORDS = [
   "Sasa",
 ];
 
-export const CONTACT_EMAIL = "founders@usesasa.com";
+export const CONTACT_EMAIL = "founders@usesasa.xyz";
