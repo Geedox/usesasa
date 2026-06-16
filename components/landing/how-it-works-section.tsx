@@ -168,7 +168,7 @@ export function HowItWorksSection() {
               </div>
 
               {/* Code content */}
-              <div className="p-8 font-mono text-sm min-h-[280px]">
+              <div className="p-4 sm:p-8 font-mono text-xs sm:text-sm min-h-[240px] sm:min-h-[280px] overflow-x-auto">
                 <pre className="text-background/70">
                   {steps[activeStep].code.split("\n").map((line, lineIndex) => (
                     <div

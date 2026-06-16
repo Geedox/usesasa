@@ -196,7 +196,7 @@ export function DevelopersSection() {
               </div>
               
               {/* Code content */}
-              <div className="p-8 font-mono text-sm bg-foreground/[0.01] min-h-[220px]">
+              <div className="p-4 sm:p-8 font-mono text-xs sm:text-sm bg-foreground/[0.01] min-h-[200px] sm:min-h-[220px] overflow-x-auto">
                 <pre className="text-foreground/80">
                   {codeExamples[activeTab].code.split('\n').map((line, lineIndex) => (
                     <div 
