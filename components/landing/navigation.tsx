@@ -8,8 +8,8 @@ import { useBetaModal } from "./beta-modal";
 const navLinks = [
   { name: "How it works", href: "#how-it-works" },
   { name: "Channels", href: "#developers" },
-  { name: "Trust", href: "#security" },
   { name: "Pricing", href: "#pricing" },
+  { name: "FAQ", href: "#faq" },
 ];
 
 export function Navigation() {

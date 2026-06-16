@@ -8,7 +8,7 @@ const footerLinks = {
     { name: "How it works", href: "#how-it-works" },
     { name: "Pricing", href: "#pricing" },
     { name: "Coverage", href: "#integrations" },
-    { name: "Trust", href: "#security" },
+    { name: "FAQ", href: "#faq" },
   ],
   Channels: [
     { name: "WhatsApp", href: "#developers" },

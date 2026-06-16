@@ -11,6 +11,7 @@ import {
   SITE_KEYWORDS,
   CONTACT_EMAIL,
 } from '@/lib/site'
+import { FAQS } from '@/lib/faq'
 
 const instrumentSans = Instrument_Sans({ 
   subsets: ["latin"],
@@ -135,6 +136,15 @@ const jsonLd = {
         { '@type': 'HowToStep', position: 3, name: 'Apply', text: 'The Chrome extension fills the form and submits from your own logged-in browser session.' },
         { '@type': 'HowToStep', position: 4, name: 'Track', text: 'Recruiter replies route back to the right application automatically and you get a WhatsApp ping.' },
       ],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': `${SITE_URL}/#faq`,
+      mainEntity: FAQS.map((faq) => ({
+        '@type': 'Question',
+        name: faq.question,
+        acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+      })),
     },
   ],
 }
