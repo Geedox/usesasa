@@ -55,7 +55,10 @@ export function PricingSection() {
   const [isUSD, setIsUSD] = useState(false);
 
   return (
-    <section id="pricing" className="relative py-32 lg:py-40 border-t border-foreground/10">
+    <section
+      id="pricing"
+      className="relative py-32 lg:py-40 border-t border-foreground/10"
+    >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         {/* Header */}
         <div className="max-w-3xl mb-20">
@@ -68,8 +71,9 @@ export function PricingSection() {
             <span className="text-stroke">Not the tool.</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-xl">
-            Buy credits, not a subscription. 1 credit = 1 application submitted —
-            and you're only charged when it actually goes out. Start with 5 free.
+            Buy credits, not a subscription. 1 credit = 1 application submitted,
+            and you're only charged when it actually goes out. Start with 5
+            free.
           </p>
         </div>
 
@@ -110,7 +114,9 @@ export function PricingSection() {
             <div
               key={plan.name}
               className={`relative p-8 lg:p-12 bg-background ${
-                plan.popular ? "md:-my-4 md:py-12 lg:py-16 border-2 border-foreground" : ""
+                plan.popular
+                  ? "md:-my-4 md:py-12 lg:py-16 border-2 border-foreground"
+                  : ""
               }`}
             >
               {plan.popular && (
@@ -124,8 +130,12 @@ export function PricingSection() {
                 <span className="font-mono text-xs text-muted-foreground">
                   {String(idx + 1).padStart(2, "0")}
                 </span>
-                <h3 className="font-display text-3xl text-foreground mt-2">{plan.name}</h3>
-                <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
+                <h3 className="font-display text-3xl text-foreground mt-2">
+                  {plan.name}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {plan.description}
+                </p>
               </div>
 
               {/* Price */}
@@ -134,7 +144,9 @@ export function PricingSection() {
                   <span className="font-display text-5xl lg:text-6xl text-foreground">
                     {isUSD ? plan.price.usd : plan.price.ngn}
                   </span>
-                  <span className="text-muted-foreground">/ {plan.credits} credits</span>
+                  <span className="text-muted-foreground">
+                    / {plan.credits} credits
+                  </span>
                 </div>
               </div>
 
@@ -143,7 +155,9 @@ export function PricingSection() {
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-3">
                     <Check className="w-4 h-4 text-foreground mt-0.5 shrink-0" />
-                    <span className="text-sm text-muted-foreground">{feature}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {feature}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -165,9 +179,15 @@ export function PricingSection() {
 
         {/* Bottom Note */}
         <p className="mt-12 text-center text-sm text-muted-foreground">
-          New here? Start with <span className="text-foreground">5 free applications</span> — no card required.
-          Applying at scale? The <span className="text-foreground">Power</span> pack is ₦100,000 for 500 credits (₦200 each).{" "}
-          <a href="#" className="underline underline-offset-4 hover:text-foreground transition-colors">
+          New here? Start with{" "}
+          <span className="text-foreground">5 free applications</span> — no card
+          required. Applying at scale? The{" "}
+          <span className="text-foreground">Power</span> pack is ₦100,000 for
+          500 credits (₦200 each).{" "}
+          <a
+            href="#"
+            className="underline underline-offset-4 hover:text-foreground transition-colors"
+          >
             See all packs
           </a>
         </p>

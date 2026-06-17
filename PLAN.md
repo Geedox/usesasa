@@ -53,7 +53,8 @@ Repo strategy: turn this repo into a **monorepo** (pnpm workspaces) so the dashb
 - [ ] Supabase Auth wired into Next.js (Google OAuth + email/password)
 - [ ] CV upload → Storage → LLM parse (Sonnet) → structured `Profile`
 - [ ] Profile review/edit UI (mandatory step — parse hallucinations must be caught here)
-- [ ] Onboarding wizard (basic info → CV → review → work auth → target roles → sponsorship → notifications)
+- [ ] Onboarding wizard (basic info → CV → review → work auth → target roles → sponsorship → **voice & expectations** → notifications) — see §3a
+- [ ] Voice & expectations capture (one-time) + learn-from-edits loop — see §3a
 - [ ] Greenhouse discovery client (`boards-api.greenhouse.io/v1/boards/<slug>/jobs`), top ~50 sponsor-friendly slugs seeded
 - [ ] Cheap pre-filter + LLM match scorer (cached by `(profile_version, job_id)`)
 - [ ] Matches feed UI (score, reasons, "apply")
@@ -90,6 +91,36 @@ Repo strategy: turn this repo into a **monorepo** (pnpm workspaces) so the dashb
 - [ ] Beta bug-fix pass; public launch (X, LinkedIn, Lagos tech communities)
 
 ### Phase 5+ — Remote OK, We Work Remotely, more ATSes, local NG boards (Jobberman/MyJobMag), referrals, interview prep. Workday + LinkedIn deferred until quality bar is high.
+
+---
+
+## 3a. Voice & expectations (one-time capture + self-correcting loop)
+
+**Why:** the success metric is "90% of generated CVs/letters need no edits before approval" (FRD §10). Corrections come from the model guessing tone, length, and what claims are off-limits. We kill them by pinning that down **once** at onboarding — not by ingesting noisy chat history (see `DECISIONS.md`). What reduces edits is the *quality* of a few structured inputs, not the *volume* of context.
+
+### One-time capture (added as an onboarding step)
+
+Stored on the profile (extends `writing_sample` in the `profiles` table, FRD §7.3).
+
+1. **Voice sample** — user pastes ONE piece of writing that sounds like them (a past cover letter, bio, a good email, or even a ChatGPT/Claude answer they felt nailed their voice). Optional but encouraged. One curated sample beats a 5,000-message dump.
+2. **In-their-words answers** — 2–3 short prompts reused later as raw material, never freestyled from:
+   - "Why are you looking to move?"
+   - "Describe a project you're proud of."
+   - "What do you want your next role to look like?"
+3. **Explicit expectations** — the settings that usually cause hand-edits:
+   - Tone: formal / warm / direct (pick one)
+   - Cover-letter length: short (~150) / standard (~250) / detailed (~350)
+   - **Do-not-say list** — claims, titles, or framing the user never wants made
+   - Must-mention wins — achievements to surface when relevant
+   - Deal-breakers — things that disqualify a role (e.g. on-site only, no sponsorship)
+
+These feed the tailoring prompt (§ Phase 1 tailoring) as voice + guardrails, alongside the canonical profile. The do-not-say list is enforced by the same output-validator that blocks invented facts.
+
+### Self-correcting loop (cheap, compounding)
+
+When the user edits a draft before approving, diff their edit against the generated text and extract a lightweight "preference delta" (tone nudge, phrasing they removed, a fact they cut). Append to the profile's voice notes. Effect: the one-time setup keeps sharpening on its own, so corrections trend toward zero without the user doing anything. Implement after the core loop works; gate behind a cap so it can't bloat the profile or cost.
+
+> Scope: the capture step is MVP (Phase 1). The learn-from-edits loop is a fast follow — build once tailoring + diff-approve are working and you can measure edit rate.
 
 ---
 
