@@ -7,6 +7,10 @@ import { AnimatedSphere } from "./animated-sphere";
 import { useBetaModal } from "./beta-modal";
 
 const words = ["fits you", "pays more", "sponsors", "ships fast"];
+// Reserve space for the widest word so swapping words never reflows the headline.
+const longestWord = words.reduce((a, b) => (b.length > a.length ? b : a), "");
+
+const roleTypes = ["Remote", "Onsite", "Hybrid", "Local", "International"];
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
@@ -82,8 +86,13 @@ export function HeroSection() {
             <span className="block">Apply to every</span>
             <span className="block">
               job that{" "}
-              <span className="relative inline-block">
-                <span key={wordIndex} className="inline-flex">
+              <span className="relative inline-block align-top">
+                {/* Invisible sizer holds the width of the longest word, so the
+                    rotating word below cannot shift the layout. */}
+                <span className="invisible" aria-hidden>
+                  {longestWord}
+                </span>
+                <span key={wordIndex} className="absolute left-0 top-0 inline-flex">
                   {words[wordIndex].split("").map((char, i) => (
                     <span
                       key={`${wordIndex}-${i}`}
@@ -92,7 +101,7 @@ export function HeroSection() {
                         animationDelay: `${i * 50}ms`,
                       }}
                     >
-                      {char}
+                      {char === " " ? " " : char}
                     </span>
                   ))}
                 </span>
@@ -100,6 +109,22 @@ export function HeroSection() {
               </span>
             </span>
           </h1>
+        </div>
+
+        {/* Role types */}
+        <div
+          className={`flex flex-wrap gap-2 mb-10 transition-all duration-700 delay-150 ${
+            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          }`}
+        >
+          {roleTypes.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-foreground/15 bg-foreground/[0.02] px-3.5 py-1.5 text-sm text-muted-foreground"
+            >
+              {t}
+            </span>
+          ))}
         </div>
 
         {/* Description */}
@@ -112,9 +137,10 @@ export function HeroSection() {
             }`}
           >
             Sasa watches company career pages across Greenhouse, Lever, Ashby
-            and more, tailors your CV per role, and submits from your own
-            browser, with a WhatsApp ping when something needs you. Keep your
-            day job. We'll do the applying.
+            and more, and surfaces roles that fit you, whether onsite, remote,
+            hybrid, local or international. It tailors your CV per role, submits
+            from your own browser, and pings you on WhatsApp when something needs
+            you. Keep your day job. We will do the applying.
           </p>
 
           {/* CTAs */}
