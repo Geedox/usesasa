@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users, applications } from "@/lib/db/schema";
 import { seedCompanies } from "@/lib/ats/companies.seed";
@@ -20,7 +20,7 @@ export async function enqueueCrawlAll(): Promise<number> {
 // Full autonomous cycle (no dashboard click): crawl boards, then score every
 // onboarded user once discovery has had a head start. Scoring auto-tailors each
 // user's top matches, so review-ready drafts pile up on their own.
-export async function runAutonomousCycle(scoreDelaySeconds = 180): Promise<{ companies: number; users: number; renudged: number }> {
+export async function runAutonomousCycle(scoreDelaySeconds = 180): Promise<{ companies: number; users: number; renudged: number; purged: number }> {
   const companies = await enqueueCrawlAll();
 
   const onboarded = await db
@@ -35,7 +35,28 @@ export async function runAutonomousCycle(scoreDelaySeconds = 180): Promise<{ com
   // Re-surface anything stuck so it keeps coming back until it is submitted,
   // skipped, or passed.
   const renudged = await renotifyStuck();
-  return { companies, users: onboarded.length, renudged };
+
+  // Retention: drop matches the user never acted on after 60 days.
+  const purged = await purgeStaleMatches(60);
+
+  return { companies, users: onboarded.length, renudged, purged };
+}
+
+// Delete matches older than `days` that the user never acted on: not queued, and
+// with no application for that job. Applications (tailored or submitted) are kept
+// as permanent history, and Browse jobs keeps everything until this runs.
+export async function purgeStaleMatches(days = 60): Promise<number> {
+  const cutoff = new Date(Date.now() - days * 86400000);
+  const res = await db.execute(sql`
+    DELETE FROM matches m
+    WHERE m.surfaced_at < ${cutoff.toISOString()}
+      AND m.user_action <> 'queued'
+      AND NOT EXISTS (
+        SELECT 1 FROM applications a WHERE a.user_id = m.user_id AND a.job_id = m.job_id
+      )
+  `);
+  const r = res as unknown as { rowCount?: number; count?: number };
+  return r.rowCount ?? r.count ?? 0;
 }
 
 // Re-send a Telegram nudge for every application still waiting on the user

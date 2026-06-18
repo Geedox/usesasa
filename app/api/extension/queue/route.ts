@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { applications, jobs, companies, profiles } from "@/lib/db/schema";
+import { applications, jobs, companies, profiles, preferences } from "@/lib/db/schema";
 import { userFromBearer } from "@/lib/extension-auth";
 import { ensureSignupBonus, getBalance } from "@/lib/credits";
 import { normalizeProfile } from "@/lib/profile";
@@ -49,6 +49,11 @@ export async function GET(req: Request) {
     : null;
   const [firstName, ...rest] = (profile?.full_name ?? user.name ?? "").trim().split(/\s+/);
 
+  // Onboarding contact details (the user entered these in the wizard) — used as a
+  // fallback when the parsed CV did not include them.
+  const prefsRow = await db.query.preferences.findFirst({ where: eq(preferences.userId, user.id) });
+  const contact = (prefsRow?.onboarding as { contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string } } | null)?.contact ?? {};
+
   const rows = await db
     .select({
       id: applications.id,
@@ -71,10 +76,10 @@ export async function GET(req: Request) {
     firstName: firstName ?? "",
     lastName: rest.join(" "),
     email: profile?.email ?? user.email,
-    phone: profile?.phone ?? "",
-    linkedin: profile?.links.linkedin ?? "",
-    github: profile?.links.github ?? "",
-    portfolio: profile?.links.portfolio ?? "",
+    phone: profile?.phone || contact.phone || "",
+    linkedin: profile?.links.linkedin || contact.linkedin || "",
+    github: profile?.links.github || contact.github || "",
+    portfolio: profile?.links.portfolio || contact.portfolio || "",
   };
 
   const apps = rows.map((r) => ({

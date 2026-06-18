@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { applications } from "@/lib/db/schema";
 import { userFromBearer } from "@/lib/extension-auth";
 import { chargeForSubmission } from "@/lib/credits";
-import { notifySubmissionBlocked } from "@/lib/telegram";
+import { notifySubmissionBlocked, notifySubmitted } from "@/lib/telegram";
 
 type Result = "submitted" | "needs_user" | "failed";
 
@@ -48,6 +48,7 @@ export async function POST(req: Request) {
       .set({ state: "submitted", submittedAt: new Date(), creditsCharged: 1, pipelineStatus: "applied", pipelineUpdatedAt: new Date(), submissionNote: null })
       .where(eq(applications.id, applicationId));
     console.log(`[extension] app ${applicationId} SUBMITTED, charged 1, balance now ${balanceAfter}`);
+    await notifySubmitted(applicationId, balanceAfter);
     return NextResponse.json({ ok: true, balance: balanceAfter });
   }
 

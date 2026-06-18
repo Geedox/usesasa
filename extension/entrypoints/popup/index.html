@@ -57,9 +57,15 @@
       .muted { color: var(--muted); }
       .small { font-size: 11px; }
       .appurl { margin-left: auto; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .stat { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 2px; }
-      .stat > div { background: var(--soft); border-radius: 10px; padding: 12px; text-align: center; }
-      .big { font-size: 24px; font-weight: 600; line-height: 1; }
+      .stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 14px 0 2px; }
+      .stat > div { background: var(--soft); border-radius: 10px; padding: 10px 6px; text-align: center; }
+      .big { font-size: 20px; font-weight: 600; line-height: 1; }
+      .tiny { font-size: 10px; }
+      .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 16px 0 8px; }
+      .activity { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+      .aitem { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
+      .aitem .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .empty { font-size: 12px; color: var(--muted); padding: 8px 0; text-align: center; }
       .actions { display: flex; gap: 14px; justify-content: center; margin-top: 14px; }
       .link { background: none; color: var(--muted); font-size: 12px; padding: 4px; }
       .link:hover { color: var(--fg); }
@@ -76,9 +82,10 @@
       .pitem .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .pitem .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; }
       .tag.submitted { background: #f0fdf4; color: var(--green); }
-      .tag.needs_user { background: #fffbeb; color: var(--amber); }
+      .tag.needs_user, .tag.awaiting_review { background: #fffbeb; color: var(--amber); }
       .tag.failed { background: #fef2f2; color: var(--red); }
-      .tag.doing { background: var(--soft); color: var(--muted); }
+      .tag.queued, .tag.sending { background: #eff6ff; color: #1d4ed8; }
+      .tag.dismissed, .tag.drafted, .tag.doing { background: var(--soft); color: var(--muted); }
 
       .message { margin-top: 12px; font-size: 12px; padding: 10px 12px; border-radius: 8px; line-height: 1.4; }
       .message.error { background: #fef2f2; color: var(--red); }
@@ -120,17 +127,32 @@
           <span class="status-label">Connected</span>
           <span id="appUrl" class="muted small appurl"></span>
         </div>
+
         <div class="stat">
-          <div><div id="pending" class="big">0</div><div class="muted small">ready to send</div></div>
-          <div><div id="credits" class="big">0</div><div class="muted small">credits left</div></div>
+          <div><div id="s-ready" class="big">0</div><div class="muted tiny">ready</div></div>
+          <div><div id="s-submitted" class="big">0</div><div class="muted tiny">submitted</div></div>
+          <div><div id="s-credits" class="big">0</div><div class="muted tiny">credits</div></div>
         </div>
+        <div class="stat" style="grid-template-columns: 1fr 1fr; margin-top:7px;">
+          <div><div id="s-needs" class="big">0</div><div class="muted tiny">needs you</div></div>
+          <div><div id="s-failed" class="big">0</div><div class="muted tiny">failed</div></div>
+        </div>
+
         <button id="run" class="primary">Submit queued applications</button>
+
+        <!-- live progress during a run -->
         <div id="progress" class="progress hidden">
           <div id="progressHead" class="progress-head"></div>
           <div id="progressList" class="progress-list"></div>
         </div>
         <div id="result" class="result hidden"></div>
+
+        <!-- recent activity -->
+        <div class="section-title">Recent activity</div>
+        <div id="activity" class="activity"><div class="empty">Nothing yet.</div></div>
+
         <div class="actions">
+          <button id="refresh" class="link">Refresh</button>
           <button id="edit" class="link">Edit connection</button>
           <button id="disconnect" class="link danger">Disconnect</button>
         </div>

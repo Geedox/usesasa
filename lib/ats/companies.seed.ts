@@ -114,6 +114,11 @@ export const SMARTRECRUITERS_SLUGS: { slug: string; name: string }[] = [
   { slug: "Visa", name: "Visa" },
 ];
 
+// Workday tenants. The slug encodes "tenant|host|site" (Workday needs all three).
+export const WORKDAY_SLUGS: { slug: string; name: string }[] = [
+  { slug: "nvidia|nvidia.wd5.myworkdayjobs.com|NVIDIAExternalCareerSite", name: "NVIDIA" },
+];
+
 // Idempotent: insert any missing watched companies across all ATSes. Returns all.
 export async function seedCompanies() {
   const rows = [
@@ -121,6 +126,7 @@ export async function seedCompanies() {
     ...LEVER_SLUGS.map((c) => ({ name: c.name, ats: "lever" as const, atsSlug: c.slug })),
     ...ASHBY_SLUGS.map((c) => ({ name: c.name, ats: "ashby" as const, atsSlug: c.slug })),
     ...SMARTRECRUITERS_SLUGS.map((c) => ({ name: c.name, ats: "smartrecruiters" as const, atsSlug: c.slug })),
+    ...WORKDAY_SLUGS.map((c) => ({ name: c.name, ats: "workday" as const, atsSlug: c.slug })),
   ];
   await db
     .insert(companies)

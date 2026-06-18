@@ -7,7 +7,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Node-only libs that must not be bundled (loaded at runtime on the server).
-  serverExternalPackages: ["pg-boss"],
+  serverExternalPackages: ["pg-boss", "pdfkit"],
 }
 
 export default nextConfig

@@ -3,12 +3,12 @@ import { Search, Sparkles, ListChecks } from "lucide-react";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications, users } from "@/lib/db/schema";
-import Link from "next/link";
 import { DiscoverButton } from "@/components/dashboard/discover-button";
 import { AddYourOwn } from "@/components/dashboard/add-your-own";
 import { ApplyButton } from "@/components/dashboard/apply-button";
 import { ScanningMatches } from "@/components/dashboard/scanning-matches";
 import { ExtensionModal } from "@/components/dashboard/extension-modal";
+import { ApplicationsTable } from "@/components/dashboard/applications-table";
 import { MATCH_THRESHOLD } from "@/lib/matching/score";
 
 function timeAgo(date: Date | null): string {
@@ -51,17 +51,6 @@ function MatchRing({ value }: { value: number }) {
 
 const filters = ["Date", "Location", "Workplace", "Salary", "Experience", "Sponsors visa", "Role", "Job type", "More"];
 
-const STATE_LABEL: Record<string, string> = {
-  drafted: "Tailoring",
-  awaiting_review: "Review",
-  needs_user: "Needs you",
-  queued: "Queued",
-  sending: "Sending",
-  submitted: "Submitted",
-  failed: "Failed",
-  dismissed: "Skipped",
-};
-
 export default async function DashboardPage() {
   const session = await getSession();
   const rows = session
@@ -80,8 +69,8 @@ export default async function DashboardPage() {
         .innerJoin(jobs, eq(matchesTable.jobId, jobs.id))
         .innerJoin(companies, eq(jobs.companyId, companies.id))
         .where(and(eq(matchesTable.userId, session.user.id), gte(matchesTable.score, MATCH_THRESHOLD)))
-        .orderBy(desc(matchesTable.score))
-        .limit(12)
+        .orderBy(desc(matchesTable.surfacedAt), desc(matchesTable.score))
+        .limit(30)
     : [];
 
   const appRows = session
@@ -105,14 +94,16 @@ export default async function DashboardPage() {
         .limit(50)
     : [];
 
-  const tabCounts = {
-    All: appRows.length,
-    Submitted: appRows.filter((a) => a.state === "submitted").length,
-    "In flight": appRows.filter((a) => a.state === "queued" || a.state === "sending").length,
-    "Needs you": appRows.filter((a) => a.state === "needs_user" || a.state === "awaiting_review").length,
-    Failed: appRows.filter((a) => a.state === "failed").length,
-    Skipped: 0,
-  };
+  const applicationRows = appRows.map((a) => ({
+    id: a.id,
+    state: a.state,
+    company: a.company,
+    title: a.title,
+    cvReady: Boolean(a.tailoredCv),
+    coverReady: Boolean(a.coverLetterText),
+    embellished: (a.tailoringValidation as { embellished?: boolean } | null)?.embellished === true,
+    appliedAt: (a.submittedAt ?? a.createdAt)?.toISOString() ?? null,
+  }));
 
   const userRow = session
     ? await db.query.users.findFirst({ where: eq(users.id, session.user.id) })
@@ -211,51 +202,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-foreground/10 bg-background">
-        <div className="flex flex-wrap items-center gap-2 p-4 border-b border-foreground/10">
-          {(Object.keys(tabCounts) as (keyof typeof tabCounts)[]).map((t, i) => (
-            <button
-              key={t}
-              className={`rounded-full px-3 py-1 text-sm cursor-pointer ${
-                i === 0 ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t} <span className={i === 0 ? "text-background/60" : "text-muted-foreground"}>{tabCounts[t]}</span>
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-2 rounded-lg border border-foreground/10 px-3 h-8">
-            <Search className="w-3.5 h-3.5 text-muted-foreground" />
-            <input placeholder="Search company..." className="bg-transparent outline-none text-sm w-40" />
-          </div>
-        </div>
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] px-6 py-3 border-b border-foreground/10 font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
-          <span>Company</span><span>CV</span><span>Cover letter</span><span>Status</span><span>Applied</span>
-        </div>
-        {appRows.length === 0 ? (
-          <div className="py-20 text-center text-sm text-muted-foreground">
-            No applications yet. Approve a match above and it will show up here.
-          </div>
-        ) : (
-          appRows.map((a) => (
-            <Link
-              key={a.id}
-              href={`/dashboard/applications/${a.id}`}
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center px-6 py-4 border-b border-foreground/5 last:border-b-0 text-sm hover:bg-foreground/[0.02]"
-            >
-              <span className="min-w-0 truncate flex items-center gap-2">
-                <span className="truncate"><span className="font-medium">{a.company}</span> · <span className="text-muted-foreground">{a.title}</span></span>
-                {(a.tailoringValidation as { embellished?: boolean } | null)?.embellished && (
-                  <span className="shrink-0 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] font-medium">Embellished</span>
-                )}
-              </span>
-              <span className="text-muted-foreground">{a.tailoredCv ? "Ready" : "—"}</span>
-              <span className="text-muted-foreground">{a.coverLetterText ? "Ready" : "Off"}</span>
-              <span><span className="rounded-md bg-foreground/[0.05] px-2 py-0.5 text-xs">{STATE_LABEL[a.state] ?? a.state}</span></span>
-              <span className="text-muted-foreground">{timeAgo(a.submittedAt ?? a.createdAt)}</span>
-            </Link>
-          ))
-        )}
-      </div>
+      <ApplicationsTable rows={applicationRows} />
     </main>
   );
 }

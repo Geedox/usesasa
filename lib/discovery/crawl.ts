@@ -7,12 +7,14 @@ import { fetchGreenhouseJobs } from "@/lib/ats/greenhouse";
 import { fetchLeverJobs } from "@/lib/ats/lever";
 import { fetchAshbyJobs } from "@/lib/ats/ashby";
 import { fetchSmartRecruitersJobs } from "@/lib/ats/smartrecruiters";
+import { fetchWorkdayJobs } from "@/lib/ats/workday";
 
 const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>> = {
   greenhouse: fetchGreenhouseJobs,
   lever: fetchLeverJobs,
   ashby: fetchAshbyJobs,
   smartrecruiters: fetchSmartRecruitersJobs,
+  workday: fetchWorkdayJobs,
 };
 
 // Fetch a company's postings from its ATS and upsert into `jobs` (idempotent on

@@ -1,5 +1,21 @@
 import { getConfig, setConfig } from "@/lib/config";
-import { fetchQueue } from "@/lib/api";
+import { fetchStats } from "@/lib/api";
+
+const STATE_LABEL: Record<string, string> = {
+  drafted: "Tailoring",
+  awaiting_review: "Review",
+  needs_user: "Needs you",
+  queued: "Queued",
+  sending: "Sending",
+  submitted: "Submitted",
+  failed: "Failed",
+  dismissed: "Skipped",
+};
+function timeAgo(iso: string | null): string {
+  if (!iso) return "";
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return d <= 0 ? "today" : d === 1 ? "1d" : `${d}d`;
+}
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const inp = (id: string) => el<HTMLInputElement>(id);
@@ -27,28 +43,37 @@ function result(text: string, kind: "ok" | "warn" | "") {
   r.classList.remove("hidden");
 }
 
-// Friendly mapping for the queue fetch errors thrown by fetchQueue ("queue 401" etc).
-function explain(e: unknown): string {
-  const s = String(e);
-  if (s.includes("401")) return "That token is invalid or expired. Generate a new one in Settings.";
-  if (s.includes("Failed to fetch") || s.includes("NetworkError")) return "Could not reach the app. Check the App URL and that it is running.";
-  return "Something went wrong. Please try again.";
-}
-
-// Load queue counts into the connected view; returns false if the token is rejected.
+// Load stats + recent activity into the connected view. Returns false if the
+// token is rejected or the app is unreachable.
 async function refreshCounts(): Promise<boolean> {
   const cfg = await getConfig();
   el("appUrl").textContent = cfg.baseUrl.replace(/^https?:\/\//, "");
-  try {
-    const { balance, applications } = await fetchQueue(cfg);
-    el("pending").textContent = String(applications.length);
-    el("credits").textContent = String(balance);
-    message("");
-    return true;
-  } catch (e) {
-    message(explain(e), "error");
+  const stats = await fetchStats(cfg);
+  if (!stats) {
+    message("Could not reach the app, or the token is invalid. Check the App URL and token in Settings.", "error");
     return false;
   }
+  el("s-ready").textContent = String(stats.counts.ready);
+  el("s-submitted").textContent = String(stats.counts.submitted);
+  el("s-credits").textContent = String(stats.balance);
+  el("s-needs").textContent = String(stats.counts.needsYou);
+  el("s-failed").textContent = String(stats.counts.failed);
+
+  const list = el("activity");
+  if (!stats.recent.length) {
+    list.innerHTML = '<div class="empty">Nothing yet.</div>';
+  } else {
+    list.innerHTML = stats.recent
+      .map((r) => {
+        const label = STATE_LABEL[r.state] ?? r.state;
+        const co = (r.company || "").replace(/</g, "&lt;");
+        const ti = (r.title || "").replace(/</g, "&lt;");
+        return `<div class="aitem"><span class="name"><b>${co}</b> · ${ti}</span><span class="tag ${r.state}">${label}</span><span class="muted tiny">${timeAgo(r.at)}</span></div>`;
+      })
+      .join("");
+  }
+  message("");
+  return true;
 }
 
 async function render() {
@@ -123,7 +148,7 @@ el<HTMLButtonElement>("run").addEventListener("click", async () => {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Working';
   el("result").classList.add("hidden");
-  message("Applications open in background tabs and submit in your session.", "info");
+  message("Each application opens in a tab and submits in your session.", "info");
 
   const res = (await chrome.runtime.sendMessage({ type: "run" })) as
     | { error?: string; total?: number; submitted?: number; needsUser?: number; failed?: number; balance?: number }
@@ -147,6 +172,13 @@ el<HTMLButtonElement>("run").addEventListener("click", async () => {
     );
   }
   await refreshCounts();
+});
+
+el<HTMLButtonElement>("refresh").addEventListener("click", async () => {
+  const btn = el<HTMLButtonElement>("refresh");
+  btn.textContent = "Refreshing…";
+  await refreshCounts();
+  btn.textContent = "Refresh";
 });
 
 el<HTMLButtonElement>("edit").addEventListener("click", () => {

@@ -21,6 +21,22 @@ export type QueuedApp = {
 
 export type SubmitResult = "submitted" | "needs_user" | "failed";
 
+export type Stats = {
+  balance: number;
+  counts: { ready: number; submitted: number; needsYou: number; failed: number; skipped: number };
+  recent: { company: string; title: string; state: string; at: string | null }[];
+};
+
+export async function fetchStats(cfg: Config): Promise<Stats | null> {
+  try {
+    const res = await fetch(`${cfg.baseUrl}/api/extension/stats`, { headers: { Authorization: `Bearer ${cfg.token}` } });
+    if (!res.ok) return null;
+    return (await res.json()) as Stats;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchQueue(cfg: Config): Promise<{ balance: number; applications: QueuedApp[] }> {
   const res = await fetch(`${cfg.baseUrl}/api/extension/queue`, {
     headers: { Authorization: `Bearer ${cfg.token}` },

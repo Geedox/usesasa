@@ -20,7 +20,7 @@ import {
 
 const nav = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutGrid },
-  { name: "Browse jobs", href: "#", icon: Search },
+  { name: "Browse jobs", href: "/dashboard/browse", icon: Search },
   { name: "Inbox", href: "#", icon: Inbox, badge: 0 },
   { name: "Tracker", href: "#", icon: KanbanSquare },
   { name: "Profile", href: "/dashboard/profile", icon: User },

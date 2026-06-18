@@ -21,6 +21,7 @@ export type Ats =
   | "lever"
   | "ashby"
   | "smartrecruiters"
+  | "workday"
   | "workable"
   | "wellfound"
   | "yc"

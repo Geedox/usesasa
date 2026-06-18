@@ -58,8 +58,8 @@ async function main() {
   // Autonomous cycle: crawl boards + score every onboarded user, no dashboard click.
   await boss.work(QUEUES.DISCOVER_TICK, async () => {
     console.log("[worker] discover_tick — running autonomous cycle");
-    const { companies, users, renudged } = await runAutonomousCycle();
-    console.log(`[worker] tick: queued ${companies} boards, scoring ${users} users, renudged ${renudged} stuck`);
+    const { companies, users, renudged, purged } = await runAutonomousCycle();
+    console.log(`[worker] tick: queued ${companies} boards, scoring ${users} users, renudged ${renudged} stuck, purged ${purged} stale matches`);
   });
 
   // Register the recurring schedule (pg-boss upserts by name, so this is idempotent).

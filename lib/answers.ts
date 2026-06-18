@@ -6,6 +6,21 @@ import { validateNoFabrication } from "@/lib/tailoring/validate";
 export type AnswerQuestion = { id: string; label: string; type: string; options?: string[] };
 type Job = { title: string; company: string; rawJd: string };
 
+// Details the user gave at onboarding (and from the profile/account) used to
+// answer logistics questions like phone, city, country, and work authorization.
+export type Applicant = {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  country?: string;
+  state?: string;
+  links?: Record<string, string>;
+  authorizedCountries?: string[];
+  needsSponsorship?: boolean;
+  sponsorshipCountries?: string[];
+};
+
 function profileFacts(profile: Profile): string {
   return JSON.stringify({
     name: profile.full_name,
@@ -24,7 +39,7 @@ async function callModel(
   profile: Profile,
   job: Job,
   questions: AnswerQuestion[],
-  opts: { embellish?: boolean; avoid?: string[] },
+  opts: { embellish?: boolean; avoid?: string[]; applicant?: Applicant },
 ): Promise<Record<string, string>> {
   const qList = questions
     .map((q) => {
@@ -39,11 +54,14 @@ async function callModel(
   const avoidNote = opts.avoid?.length
     ? `\n\nA previous draft invented these claims. Do NOT include them or anything like them:\n- ${opts.avoid.join("\n- ")}`
     : "";
+  const applicantBlock = opts.applicant
+    ? `\n\nAPPLICANT DETAILS (the candidate provided these; use them for logistics questions like phone, city, country, links, and work authorization):\n${JSON.stringify(opts.applicant)}`
+    : "";
 
   const prompt = `You are filling a job application form for this candidate, applying to "${job.company}" for "${job.title}".
 
 CANDIDATE PROFILE:
-${profileFacts(profile)}
+${profileFacts(profile)}${applicantBlock}
 
 JOB DESCRIPTION (for context):
 ${job.rawJd.slice(0, 2500)}
@@ -53,6 +71,8 @@ ${qList}
 
 Rules:
 - ${honesty}
+- Use APPLICANT DETAILS to answer phone, location/city, country, and work eligibility questions. For "are you authorized to work in <country>", answer truthfully from authorizedCountries and needsSponsorship (if the role's country is not one they are authorized in and they need sponsorship, the honest answer is "No"). For "source of right to work", if they need sponsorship and have none, choose the option that means they require sponsorship, or leave it empty if no such option fits.
+- For voluntary or demographic self-identification questions (gender, race, ethnicity, veteran status, disability) where the candidate gave no data, do NOT leave it empty. Answer with the neutral decline option these fields always offer, such as "Decline to self identify", "Prefer not to say", "I do not wish to answer", or "I don't wish to answer". Match the wording of a listed option when options are given.
 - For a [select] or [radio], return EXACTLY one of the listed options, copied verbatim.
 - For a [checkbox], return "yes" or "no" (yes for standard consent or eligibility the candidate meets).
 - For [text]/[textarea], write a concise, specific, first person answer (1-3 sentences, under 80 words).
@@ -94,13 +114,13 @@ export async function generateAnswers(
   profile: Profile,
   job: Job,
   questions: AnswerQuestion[],
-  opts: { embellish?: boolean } = {},
+  opts: { embellish?: boolean; applicant?: Applicant } = {},
 ): Promise<Record<string, string>> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || questions.length === 0) return {};
   const anthropic = new Anthropic({ apiKey });
 
-  let answers = await callModel(anthropic, profile, job, questions, { embellish: opts.embellish });
+  let answers = await callModel(anthropic, profile, job, questions, { embellish: opts.embellish, applicant: opts.applicant });
 
   // The user opted into embellishment, so the guard does not apply.
   if (opts.embellish) return answers;
@@ -113,7 +133,7 @@ export async function generateAnswers(
   let fabrications = await validateNoFabrication(profile, combined(), jobForCheck);
   if (fabrications.length > 0) {
     console.warn(`[answers] fabrications flagged, regenerating: ${fabrications.join("; ")}`);
-    answers = await callModel(anthropic, profile, job, questions, { avoid: fabrications });
+    answers = await callModel(anthropic, profile, job, questions, { avoid: fabrications, applicant: opts.applicant });
     fabrications = await validateNoFabrication(profile, combined(), jobForCheck);
     if (fabrications.length > 0) {
       // Could not answer honestly. Blank the free-text answers so nothing

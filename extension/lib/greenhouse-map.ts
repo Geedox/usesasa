@@ -20,12 +20,21 @@ export type FieldMeta = {
   label?: string;
   type?: string;
   placeholder?: string;
+  autocomplete?: string;
 };
 
 // Classify a single form field into a known role (or null = unknown/custom).
 export function classifyField(meta: FieldMeta): FieldRole {
   const hay = [meta.name, meta.id, meta.label, meta.placeholder].filter(Boolean).join(" ").toLowerCase();
   const type = (meta.type ?? "").toLowerCase();
+  const ac = (meta.autocomplete ?? "").toLowerCase();
+
+  // Standard HTML autocomplete hints are the most reliable signal when present.
+  if (ac === "given-name") return "firstName";
+  if (ac === "family-name") return "lastName";
+  if (ac === "name") return "fullName";
+  if (ac === "email") return "email";
+  if (ac === "tel" || ac.startsWith("tel-")) return "phone";
 
   if (type === "file") {
     if (/cover\s*letter/.test(hay)) return "coverLetter";
@@ -36,8 +45,9 @@ export function classifyField(meta: FieldMeta): FieldRole {
   if (/last[\s_]*name|surname|family[\s_]*name/.test(hay)) return "lastName";
   // Single full-name field: Greenhouse "name", Lever name="name", Ashby id="_systemfield_name".
   if (/full[\s_]*name|legal[\s_]*name|systemfield[_\s]*name/.test(hay) || hay.trim() === "name") return "fullName";
-  if (/e[\s-]?mail/.test(hay)) return "email";
-  if (/phone|mobile|\btel\b/.test(hay)) return "phone";
+  if (type === "email" || /e[\s-]?mail/.test(hay)) return "email";
+  // type="tel" catches international phone widgets whose input has no phone-ish name/label.
+  if (type === "tel" || /phone|mobile|\btel\b/.test(hay)) return "phone";
   if (/linkedin/.test(hay)) return "linkedin";
   if (/github/.test(hay)) return "github";
   if (/portfolio|personal\s*(web)?site|\bwebsite\b/.test(hay)) return "portfolio";

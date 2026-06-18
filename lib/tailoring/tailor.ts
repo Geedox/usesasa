@@ -8,6 +8,8 @@ import { notifyReviewReady, notifyNeedsReview } from "@/lib/telegram";
 
 function combined(out: TailoredOutput): string {
   return [
+    out.summary,
+    out.skills.join(", "),
     ...out.experience.flatMap((e) => e.rewrittenBullets),
     out.coverLetter,
     out.answers.whyCompany,
@@ -67,15 +69,21 @@ export async function tailorApplication(applicationId: string): Promise<void> {
     clean = fabrications.length === 0;
   }
 
-  // Pair rewritten bullets with the originals (for the diff view).
+  // Pair rewritten bullets with the originals (for the diff view). Pair on the
+  // original title so an embellish-aligned display title still matches its role.
   const tailoredCv = {
+    summary: out.summary,
+    skills: out.skills,
     experience: out.experience.map((e) => {
-      const original = profile.experience.find(
-        (x) => x.company.toLowerCase() === e.company.toLowerCase() && x.title.toLowerCase() === e.title.toLowerCase(),
-      );
+      const origTitle = e.originalTitle ?? e.title;
+      const original =
+        profile.experience.find(
+          (x) => x.company.toLowerCase() === e.company.toLowerCase() && x.title.toLowerCase() === origTitle.toLowerCase(),
+        ) ?? profile.experience.find((x) => x.company.toLowerCase() === e.company.toLowerCase());
       return {
         company: e.company,
         title: e.title,
+        originalTitle: origTitle,
         originalBullets: original?.bullets ?? [],
         rewrittenBullets: e.rewrittenBullets,
       };

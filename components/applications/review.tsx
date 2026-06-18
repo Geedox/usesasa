@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { diffWords } from "@/lib/diff";
 
-type RoleCv = { company: string; title: string; originalBullets: string[]; rewrittenBullets: string[] };
+type RoleCv = { company: string; title: string; originalTitle?: string; originalBullets: string[]; rewrittenBullets: string[] };
 type Answers = { whyCompany: string; whyRole: string; recentProject: string };
 
 export function ApplicationReview({
   applicationId,
   job,
+  summary: initialSummary,
+  skills,
   experience,
   coverLetter: initialCover,
   answers: initialAnswers,
@@ -23,6 +25,8 @@ export function ApplicationReview({
 }: {
   applicationId: string;
   job: { title: string; company: string; location: string };
+  summary: string;
+  skills: string[];
   experience: RoleCv[];
   coverLetter: string;
   answers: Answers;
@@ -32,6 +36,7 @@ export function ApplicationReview({
 }) {
   const router = useRouter();
   const [roles, setRoles] = useState<RoleCv[]>(experience);
+  const [summary, setSummary] = useState(initialSummary);
   const [coverLetter, setCoverLetter] = useState(initialCover);
   const [answers, setAnswers] = useState<Answers>(initialAnswers);
   const [dirty, setDirty] = useState(false);
@@ -62,7 +67,7 @@ export function ApplicationReview({
       const res = await fetch(`/api/applications/${applicationId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tailoredCv: { experience: roles }, coverLetterText: coverLetter, customAnswers: answers }),
+        body: JSON.stringify({ tailoredCv: { summary, skills, experience: roles }, coverLetterText: coverLetter, customAnswers: answers }),
       });
       if (!res.ok) throw new Error("Could not save.");
       setDirty(false);
@@ -157,13 +162,55 @@ export function ApplicationReview({
         </div>
       )}
 
+      {/* Tailored summary + skills */}
+      {(initialSummary || skills.length > 0) && (
+        <section className="mb-8">
+          <h2 className="font-display text-xl tracking-tight mb-4">Summary and skills</h2>
+          {initialSummary && (
+            <Textarea
+              value={summary}
+              onChange={(e) => {
+                setSummary(e.target.value);
+                setDirty(true);
+              }}
+              rows={4}
+              className="mb-4"
+            />
+          )}
+          {skills.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {skills.map((s) => (
+                <span key={s} className="rounded-full border border-foreground/15 px-3 py-1 text-sm text-muted-foreground">
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* CV bullets */}
       <section className="mb-8">
-        <h2 className="font-display text-xl tracking-tight mb-4">Résumé changes</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-display text-xl tracking-tight">Résumé changes</h2>
+          <a
+            href={`/api/applications/${applicationId}/resume`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-foreground/15 px-3 py-1.5 text-sm hover:border-foreground/40 cursor-pointer"
+          >
+            <Download className="w-4 h-4" /> Download PDF
+          </a>
+        </div>
         <div className="flex flex-col gap-6">
           {roles.map((role, ri) => (
             <div key={ri} className="rounded-xl border border-foreground/10 p-5">
-              <div className="font-medium mb-1">{role.title}</div>
+              <div className="font-medium mb-1">
+                {role.title}
+                {role.originalTitle && role.originalTitle !== role.title && (
+                  <span className="ml-2 text-xs font-normal text-amber-700">was {role.originalTitle}</span>
+                )}
+              </div>
               <div className="text-sm text-muted-foreground mb-4">{role.company}</div>
               <div className="flex flex-col gap-5">
                 {role.rewrittenBullets.map((b, bi) => (

@@ -6,7 +6,7 @@ import { applications, jobs, companies } from "@/lib/db/schema";
 import { ApplicationReview } from "@/components/applications/review";
 import { ApplicationProcessing } from "@/components/applications/processing";
 
-type RoleCv = { company: string; title: string; originalBullets: string[]; rewrittenBullets: string[] };
+type RoleCv = { company: string; title: string; originalTitle?: string; originalBullets: string[]; rewrittenBullets: string[] };
 
 export default async function ApplicationReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -39,9 +39,11 @@ export default async function ApplicationReviewPage({ params }: { params: Promis
     return <ApplicationProcessing title={row.jobTitle} />;
   }
 
-  const experience = ((row.tailoredCv as { experience?: RoleCv[] } | null)?.experience ?? []).map((e) => ({
+  const cv = row.tailoredCv as { experience?: RoleCv[]; summary?: string; skills?: string[] } | null;
+  const experience = (cv?.experience ?? []).map((e) => ({
     company: e.company ?? "",
     title: e.title ?? "",
+    originalTitle: e.originalTitle ?? e.title ?? "",
     originalBullets: Array.isArray(e.originalBullets) ? e.originalBullets : [],
     rewrittenBullets: Array.isArray(e.rewrittenBullets) ? e.rewrittenBullets : [],
   }));
@@ -52,6 +54,8 @@ export default async function ApplicationReviewPage({ params }: { params: Promis
     <ApplicationReview
       applicationId={row.id}
       job={{ title: row.jobTitle, company: row.company, location: row.jobLocation ?? "" }}
+      summary={cv?.summary ?? ""}
+      skills={Array.isArray(cv?.skills) ? cv.skills : []}
       experience={experience}
       coverLetter={row.coverLetterText ?? ""}
       answers={{ whyCompany: answers.whyCompany ?? "", whyRole: answers.whyRole ?? "", recentProject: answers.recentProject ?? "" }}

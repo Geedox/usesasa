@@ -1,11 +1,19 @@
 import { and, eq } from "drizzle-orm";
+import { ProxyAgent } from "undici";
 import { db } from "@/lib/db";
 import { users, applications, jobs, companies, matches } from "@/lib/db/schema";
 import { SITE_URL } from "@/lib/site";
 import { enqueueTailorApplication } from "@/lib/queue";
+import { generateResumePdf } from "@/lib/resume-pdf";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = (method: string) => `https://api.telegram.org/bot${TOKEN}/${method}`;
+
+// If a proxy is configured, route Telegram calls through it (Node's fetch does
+// not honor system proxies on its own). Useful where Telegram is blocked.
+const PROXY_URL = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.ALL_PROXY || "";
+const proxyDispatcher = PROXY_URL ? new ProxyAgent(PROXY_URL) : undefined;
+if (PROXY_URL) console.log(`[telegram] routing through proxy ${PROXY_URL.replace(/\/\/.*@/, "//***@")}`);
 
 export function telegramEnabled(): boolean {
   return TOKEN.length > 0;
@@ -19,7 +27,8 @@ async function call<T = unknown>(method: string, body?: Record<string, unknown>)
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body ?? {}),
-    });
+      ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
+    } as RequestInit & { dispatcher?: unknown });
     const data = (await res.json()) as { ok: boolean; result?: T; description?: string };
     if (!data.ok) {
       console.error(`[telegram] ${method} failed:`, data.description);
@@ -46,6 +55,25 @@ export async function sendMessage(
     disable_web_page_preview: true,
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
   });
+}
+
+// Send a file (e.g. the tailored resume PDF) so the user can preview/download it
+// in Telegram without opening the dashboard.
+export async function sendDocument(chatId: string, buffer: Buffer, filename: string, caption?: string): Promise<void> {
+  if (!TOKEN) return;
+  try {
+    const form = new FormData();
+    form.append("chat_id", chatId);
+    if (caption) form.append("caption", caption);
+    form.append("document", new Blob([new Uint8Array(buffer)], { type: "application/pdf" }), filename);
+    await fetch(API("sendDocument"), {
+      method: "POST",
+      body: form,
+      ...(proxyDispatcher ? { dispatcher: proxyDispatcher } : {}),
+    } as RequestInit & { dispatcher?: unknown });
+  } catch {
+    console.warn("[telegram] sendDocument unreachable");
+  }
 }
 
 async function answerCallback(callbackId: string, text?: string): Promise<void> {
@@ -103,10 +131,34 @@ export async function notifyReviewReady(applicationId: string): Promise<void> {
       [{ text: "Review on web", url: `${SITE_URL}/dashboard/applications/${app.id}` }],
     ],
   });
+
+  // Attach the tailored resume so the user can preview it in Telegram.
+  try {
+    const pdf = await generateResumePdf(app.id);
+    if (pdf) await sendDocument(user.telegramChatId, pdf.buffer, pdf.filename, "Tailored resume for this role");
+  } catch (err) {
+    console.warn("[telegram] could not attach resume PDF:", err);
+  }
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Sent when an application is actually submitted from the user's browser.
+export async function notifySubmitted(applicationId: string, balance: number): Promise<void> {
+  if (!telegramEnabled()) return;
+  const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
+  if (!app) return;
+  const user = await db.query.users.findFirst({ where: eq(users.id, app.userId) });
+  if (!user?.telegramChatId) return;
+  const job = await db.query.jobs.findFirst({ where: eq(jobs.id, app.jobId) });
+  const company = job ? await db.query.companies.findFirst({ where: eq(companies.id, job.companyId) }) : null;
+  await sendMessage(
+    user.telegramChatId,
+    `✅ Applied to <b>${escapeHtml(company?.name ?? "a company")}: ${escapeHtml(job?.title ?? "a role")}</b>.\n` +
+      `${balance} application credit${balance === 1 ? "" : "s"} left.`,
+  );
 }
 
 // Sent when the extension could not finish a submission (an unmapped required

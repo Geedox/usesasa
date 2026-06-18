@@ -43,9 +43,10 @@ async function runOnTab(app: QueuedApp, resumeBase64: string | null): Promise<Ru
     return { result: "needs_user", reason: "no application URL for this job" };
   }
   console.log(`[sasa] opening ${app.applyUrl} for ${app.company} (${app.title})`);
-  // Open in the background so the popup stays open (and the user is not yanked
-  // between tabs). Content scripts still run on inactive tabs.
-  const tab = await chrome.tabs.create({ url: app.applyUrl, active: false });
+  // Open in the FOREGROUND. Chrome throttles background tabs (clamped timers,
+  // paused rendering), which makes custom dropdown menus fail to open in time.
+  // An active tab fills reliably; progress still shows on the toolbar badge.
+  const tab = await chrome.tabs.create({ url: app.applyUrl, active: true });
   const tabId = tab.id;
   if (!tabId) {
     console.error(`[sasa] could not open a tab for ${app.company}`);

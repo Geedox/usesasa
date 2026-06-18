@@ -33,16 +33,45 @@ export async function POST(req: Request) {
 
   const company = await db.query.companies.findFirst({ where: eq(companies.id, job.companyId) });
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, user.id) });
-  const embellish =
-    (prefs?.onboarding as { applicationSettings?: { allowEmbellishment?: boolean } } | null)?.applicationSettings
-      ?.allowEmbellishment === true;
+  const onboarding = (prefs?.onboarding as {
+    applicationSettings?: { allowEmbellishment?: boolean };
+    contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string };
+    location?: { city?: string; country?: string; state?: string };
+    workEligibility?: { authorizedCountries?: string[]; needsSponsorship?: boolean; sponsorshipCountries?: string[] };
+  } | null) ?? {};
+  const embellish = onboarding.applicationSettings?.allowEmbellishment === true;
+
+  const profile = normalizeProfile(profileRow.parsedData);
+  // Combine what the user gave at onboarding with the parsed profile/account so
+  // the agent can answer logistics questions (phone, city, work authorization).
+  const applicant = {
+    fullName: profile.full_name || user.name || undefined,
+    email: profile.email || user.email,
+    phone: profile.phone || onboarding.contact?.phone,
+    city: onboarding.location?.city || profile.location?.city,
+    country: onboarding.location?.country || profile.location?.country,
+    state: onboarding.location?.state,
+    links: { ...profile.links, ...onboarding.contact },
+    authorizedCountries: onboarding.workEligibility?.authorizedCountries,
+    needsSponsorship: onboarding.workEligibility?.needsSponsorship,
+    sponsorshipCountries: onboarding.workEligibility?.sponsorshipCountries,
+  };
 
   console.log(`[extension] answering ${questions.length} question(s) for app ${applicationId}`);
+  console.log(
+    "[extension] questions + options:",
+    questions.map((q) => `${q.label} [${q.type}] options=[${(q.options ?? []).join(" | ") || "none"}]`),
+  );
   const answers = await generateAnswers(
-    normalizeProfile(profileRow.parsedData),
+    profile,
     { title: job.title, company: company?.name ?? "", rawJd: job.rawJd ?? "" },
     questions.slice(0, 20),
-    { embellish },
+    { embellish, applicant },
+  );
+
+  console.log(
+    `[extension] generated answers:`,
+    questions.map((q) => `${q.label} [${q.type}] => ${answers[q.id] || "(empty)"}`),
   );
 
   // Persist alongside the application so a retry reuses them.
