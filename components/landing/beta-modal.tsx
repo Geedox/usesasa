@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,24 @@ export function BetaModalProvider({ children }: { children: ReactNode }) {
 
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Geofence the pricing copy: Nigeria sees Naira, everyone else sees USD.
+  const [isUSD, setIsUSD] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("https://ipwho.is/?fields=country_code");
+        const data = (await res.json()) as { country_code?: string };
+        if (alive && data?.country_code) setIsUSD(data.country_code !== "NG");
+      } catch {
+        /* keep the Naira default */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const resetForm = () => {
     setFullName("");
@@ -185,7 +203,7 @@ export function BetaModalProvider({ children }: { children: ReactNode }) {
                   <Label>
                     Are you okay with the pricing?{" "}
                     <span className="text-muted-foreground font-normal">
-                      (packs from ₦5,000 / ~₦333 per application, after your free credits)
+                      (packs from {isUSD ? "$3.50, about $0.23" : "₦5,000, about ₦333"} per application, after your free credits)
                     </span>
                   </Label>
                   <div className="flex gap-3">
