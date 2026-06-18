@@ -12,27 +12,24 @@ import { PricingSection } from "@/components/landing/pricing-section";
 import { FaqSection } from "@/components/landing/faq-section";
 import { CtaSection } from "@/components/landing/cta-section";
 import { FooterSection } from "@/components/landing/footer-section";
-import { BetaModalProvider } from "@/components/landing/beta-modal";
 
 export default function Home() {
   return (
-    <BetaModalProvider>
-      <main className="relative min-h-screen overflow-x-hidden noise-overlay">
-        <Navigation />
-        <HeroSection />
-        <FeaturesSection />
-        <HowItWorksSection />
-        <InfrastructureSection />
-        <MetricsSection />
-        <IntegrationsSection />
-        <SecuritySection />
-        <DevelopersSection />
-        <TestimonialsSection />
-        <PricingSection />
-        <FaqSection />
-        <CtaSection />
-        <FooterSection />
-      </main>
-    </BetaModalProvider>
+    <main className="relative min-h-screen overflow-x-hidden noise-overlay">
+      <Navigation />
+      <HeroSection />
+      <FeaturesSection />
+      <HowItWorksSection />
+      <InfrastructureSection />
+      <MetricsSection />
+      <IntegrationsSection />
+      <SecuritySection />
+      <DevelopersSection />
+      <TestimonialsSection />
+      <PricingSection />
+      <FaqSection />
+      <CtaSection />
+      <FooterSection />
+    </main>
   );
 }

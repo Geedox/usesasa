@@ -1,0 +1,25 @@
+# Local development infrastructure for Sasa.
+# Cloudinary is a hosted service, so no storage container is needed here.
+# Usage: `docker compose up -d` then run the app with DATABASE_URL pointing at this Postgres.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: sasa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sasa
+      POSTGRES_PASSWORD: sasa
+      POSTGRES_DB: sasa
+    ports:
+      # Host 55432 (localhost-only) to avoid clashing with other local/Docker Postgres.
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - sasa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sasa -d sasa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  sasa_pgdata:

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sasa</title>
+    <style>
+      :root {
+        --fg: #0a0a0a;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --bg: #ffffff;
+        --soft: #f6f7f8;
+        --green: #16a34a;
+        --amber: #b45309;
+        --red: #dc2626;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        width: 340px; margin: 0; padding: 0; color: var(--fg); background: var(--bg);
+      }
+      .app { padding: 16px; }
+
+      /* Header */
+      .head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+      .logo {
+        width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--fg);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 16px;
+      }
+      .brand { font-size: 16px; font-weight: 600; line-height: 1.1; }
+      .sub { font-size: 11px; color: var(--muted); }
+      .dot { width: 9px; height: 9px; border-radius: 999px; margin-left: auto; }
+      .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(22,163,74,0.15); }
+      .dot.off { background: #cbd5e1; }
+
+      .card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+      .lead { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.45; }
+
+      label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); display: block; margin: 12px 0 5px; }
+      label:first-of-type { margin-top: 0; }
+      input {
+        width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+        outline: none; transition: border-color .15s;
+      }
+      input:focus { border-color: var(--fg); }
+
+      button { font-size: 14px; cursor: pointer; border-radius: 999px; border: 0; }
+      .primary { width: 100%; margin-top: 14px; padding: 11px; background: var(--fg); color: #fff; font-weight: 500; }
+      .primary:disabled { opacity: .6; cursor: default; }
+      .hint { font-size: 11px; color: var(--muted); margin: 10px 0 0; text-align: center; }
+
+      /* Connected */
+      .row { display: flex; align-items: center; gap: 8px; }
+      .status-label { font-weight: 600; font-size: 14px; }
+      .muted { color: var(--muted); }
+      .small { font-size: 11px; }
+      .appurl { margin-left: auto; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .stat { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0 2px; }
+      .stat > div { background: var(--soft); border-radius: 10px; padding: 12px; text-align: center; }
+      .big { font-size: 24px; font-weight: 600; line-height: 1; }
+      .actions { display: flex; gap: 14px; justify-content: center; margin-top: 14px; }
+      .link { background: none; color: var(--muted); font-size: 12px; padding: 4px; }
+      .link:hover { color: var(--fg); }
+      .link.danger:hover { color: var(--red); }
+
+      .result { margin-top: 12px; border-radius: 10px; padding: 11px 12px; font-size: 13px; line-height: 1.4; background: var(--soft); }
+      .result.ok { background: #f0fdf4; color: #166534; }
+      .result.warn { background: #fffbeb; color: var(--amber); }
+
+      .progress { margin-top: 12px; }
+      .progress-head { font-size: 12px; font-weight: 500; margin-bottom: 6px; display: flex; align-items: center; }
+      .progress-list { max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+      .pitem { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+      .pitem .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pitem .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; }
+      .tag.submitted { background: #f0fdf4; color: var(--green); }
+      .tag.needs_user { background: #fffbeb; color: var(--amber); }
+      .tag.failed { background: #fef2f2; color: var(--red); }
+      .tag.doing { background: var(--soft); color: var(--muted); }
+
+      .message { margin-top: 12px; font-size: 12px; padding: 10px 12px; border-radius: 8px; line-height: 1.4; }
+      .message.error { background: #fef2f2; color: var(--red); }
+      .message.info { background: var(--soft); color: var(--muted); }
+
+      .spinner {
+        display: inline-block; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.4);
+        border-top-color: #fff; border-radius: 999px; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 7px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .hidden { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="head">
+        <div class="logo">S</div>
+        <div>
+          <div class="brand">Sasa</div>
+          <div class="sub">Applies from your browser</div>
+        </div>
+        <span id="dot" class="dot off" title="Not connected"></span>
+      </header>
+
+      <!-- SETUP -->
+      <section id="setup" class="card hidden">
+        <p class="lead">Connect the extension to submit your approved applications from this browser.</p>
+        <label for="baseUrl">App URL</label>
+        <input id="baseUrl" placeholder="http://localhost:3000" />
+        <label for="token">Connect token</label>
+        <input id="token" type="password" placeholder="Paste from Settings" />
+        <button id="connect" class="primary">Connect</button>
+        <p class="hint">Get the token in Settings, Connect the Chrome extension.</p>
+      </section>
+
+      <!-- CONNECTED -->
+      <section id="connected" class="card hidden">
+        <div class="row">
+          <span class="status-label">Connected</span>
+          <span id="appUrl" class="muted small appurl"></span>
+        </div>
+        <div class="stat">
+          <div><div id="pending" class="big">0</div><div class="muted small">ready to send</div></div>
+          <div><div id="credits" class="big">0</div><div class="muted small">credits left</div></div>
+        </div>
+        <button id="run" class="primary">Submit queued applications</button>
+        <div id="progress" class="progress hidden">
+          <div id="progressHead" class="progress-head"></div>
+          <div id="progressList" class="progress-list"></div>
+        </div>
+        <div id="result" class="result hidden"></div>
+        <div class="actions">
+          <button id="edit" class="link">Edit connection</button>
+          <button id="disconnect" class="link danger">Disconnect</button>
+        </div>
+      </section>
+
+      <div id="message" class="message hidden"></div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

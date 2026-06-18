@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { AnimatedSphere } from "./animated-sphere";
-import { useBetaModal } from "./beta-modal";
+import Link from "next/link";
 
 const words = ["fits you", "pays more", "sponsors", "ships fast"];
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
-  const { open } = useBetaModal();
 
   useEffect(() => {
     setIsVisible(true);
@@ -127,11 +126,13 @@ export function HeroSection() {
           >
             <Button
               size="lg"
-              onClick={open}
+              asChild
               className="bg-foreground hover:bg-foreground/90 text-background px-5 sm:px-8 h-12 sm:h-14 text-sm sm:text-base rounded-full group cursor-pointer whitespace-nowrap shrink-0"
             >
-              Join the beta
-              <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+              <Link href="/login">
+                Get started
+                <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+              </Link>
             </Button>
             <Button
               size="lg"

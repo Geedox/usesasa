@@ -20,27 +20,36 @@
 
 | Layer | Choice |
 |-------|--------|
-| Web dashboard | Next.js (App Router) + TS on Vercel — **this repo** |
+| Web dashboard | Next.js (App Router) + TS — **this repo**, deployed on Railway |
 | Chrome extension | TS + Manifest V3 via WXT (separate package) |
-| Backend | Supabase: Postgres + Auth + Storage + Edge Functions |
+| Database | **Postgres** (own instance — Railway Postgres in prod, Docker locally) |
+| ORM / migrations | **Drizzle** (TS-first, SQL-close; Prisma is the alt if you prefer) |
+| Auth | **Better Auth** — Google OAuth + email/password — Drizzle/Postgres adapter, sessions in Postgres. **Two-step consent:** sign in with basic Google scopes (profile/email) first; request **`gmail.readonly`** (offline access) later as a separate in-context step ("Connect Gmail to track replies") via Better Auth's additional-scopes flow. Refresh token stored encrypted for the worker to poll Gmail |
+| File storage (CVs, tailored PDFs) | **Cloudinary** — same in dev and prod; PDFs/DOCX uploaded as `raw`/`auto`, served via signed (authenticated) URLs since CVs are private |
+| Background jobs / webhooks | **Next.js Route Handlers** for webhooks (Paystack, WhatsApp, Gmail push) + a small **Node worker service** (Dockerized) for the crawler/match/email-poll, on a schedule (node-cron or Railway cron) |
 | UI | shadcn/ui + Tailwind (already installed here) |
 | Forms | react-hook-form + zod (already installed) |
 | LLM | Anthropic Claude — Sonnet for tailoring/matching, Haiku for classification |
 | Email | Gmail API (OAuth + Pub/Sub push) |
 | WhatsApp | Meta WhatsApp Cloud API |
 | Payments | Paystack (NGN; cards/bank/USSD/mobile money) |
+| Hosting | **Railway** (web + worker + Postgres), Docker for local dev |
 | Monitoring | Sentry (errors) + PostHog (product) |
+
+> **No Supabase.** We self-host Postgres and replace the four things Supabase bundled: Auth → Better Auth, Storage → Cloudinary, Edge Functions → Next.js route handlers + a Node worker, Realtime → not needed for MVP (the dashboard polls). The FRD's Supabase references (§7) are superseded by this section.
 
 Repo strategy: turn this repo into a **monorepo** (pnpm workspaces) so the dashboard and extension share types.
 
 ```
 /apps/web         → Next.js dashboard (current code moves here, or stays at root for v1)
+/apps/worker      → Node service: crawler, match scorer, email poller (scheduled)
 /apps/extension   → WXT Chrome extension
 /packages/types   → shared zod schemas + TS types (Profile, Job, Application, ...)
+/packages/db      → Drizzle schema, migrations, and the shared DB client
 /packages/ats     → per-ATS discovery clients + field-mapping modules
-/supabase         → migrations, Edge Functions
+docker-compose.yml → Postgres (+ web + worker) for one-command local dev
 ```
-> v1 shortcut: keep the dashboard at repo root, add `/extension` and `/supabase` siblings, and a small `/shared` dir. Promote to formal workspaces only if the type-sharing pain justifies it.
+> v1 shortcut: keep the dashboard at repo root; add `/worker`, `/extension`, and a `/db` dir; use `docker-compose` for local Postgres. Cloudinary is a hosted service, so no storage container is needed locally. Promote to formal workspaces only if the type-sharing pain justifies it.
 
 ---
 
@@ -49,9 +58,10 @@ Repo strategy: turn this repo into a **monorepo** (pnpm workspaces) so the dashb
 ### Phase 1 (Wk 1–3) — Core loop, one source, no payments
 **Goal:** submit one real application end-to-end on a real Greenhouse form.
 
-- [ ] Supabase project + schema migration (all tables from FRD §7.3)
-- [ ] Supabase Auth wired into Next.js (Google OAuth + email/password)
-- [ ] CV upload → Storage → LLM parse (Sonnet) → structured `Profile`
+- [ ] Postgres (Docker locally / Railway in prod) + Drizzle schema & migration (all tables from FRD §7.3; we own the `users` table — no `auth.users`)
+- [ ] `docker-compose.yml` for local dev (Postgres) — one command to boot
+- [ ] Better Auth wired into Next.js — Google OAuth + email/password — Drizzle adapter, sessions in Postgres. Login requests **basic scopes only** (profile/email); Gmail access is a separate step later (Phase 2)
+- [ ] CV upload → Cloudinary (private/authenticated, `raw`/`auto`) → LLM parse (Sonnet) → structured `Profile`
 - [ ] Profile review/edit UI (mandatory step — parse hallucinations must be caught here)
 - [ ] Onboarding wizard (basic info → CV → review → work auth → target roles → sponsorship → **voice & expectations** → notifications) — see §3a
 - [ ] Voice & expectations capture (one-time) + learn-from-edits loop — see §3a
@@ -66,8 +76,9 @@ Repo strategy: turn this repo into a **monorepo** (pnpm workspaces) so the dashb
 - **Exit:** match → tailor → review → submit works on a sandbox Greenhouse posting.
 
 ### Phase 2 (Wk 3–5) — Tracking + notifications
-- [ ] Gmail OAuth (`readonly`) + consent UI + `watch` Pub/Sub subscription
-- [ ] Edge Function: push receiver → fetch message → Haiku classifier → route to application by sender domain
+- [ ] **"Connect Gmail" step** (in-context, after login): request `gmail.readonly` + offline access as an additional scope via Better Auth, with a consent UI explaining it's read-only and used only to follow up and track recruiter responses. Store the refresh token encrypted.
+- [ ] Gmail `watch` Pub/Sub subscription using that grant (only for users who connected Gmail)
+- [ ] Next.js route handler: Pub/Sub push receiver → fetch message → Haiku classifier → route to application by sender domain
 - [ ] Pipeline status transitions (applied → viewed → replied → interview → rejected → offer)
 - [ ] WhatsApp Cloud API setup; **submit the 7 templates for Meta review in week one of this phase** (1–3 day approval)
 - [ ] `match_alert` + `submitted_receipt` flows working end-to-end
@@ -145,9 +156,11 @@ Everything mocks cleanly: matching can run on seeded `jobs` rows before the craw
 ## 5. External setup checklist (long lead times — start early)
 
 - [ ] Meta Business + WhatsApp Business number + **submit 7 templates** (1–3 days)
-- [ ] Google Cloud project: OAuth consent screen + Gmail API + Pub/Sub topic (verification can take days)
+- [ ] Google Cloud project: OAuth consent screen + Gmail API + Pub/Sub topic. ⚠️ `gmail.readonly` is a **restricted scope** — production use needs Google OAuth verification + a CASA security assessment (weeks of lead time). Start this early; test under the 100-user unverified cap meanwhile.
 - [ ] Paystack account + business verification
-- [ ] Supabase project
+- [ ] Railway project: Postgres database service + web service + worker service
+- [ ] Cloudinary account + cloud name, API key & secret (and a signed upload preset for CVs)
+- [ ] Better Auth secret (`BETTER_AUTH_SECRET`) + Google OAuth client ID/secret (same Google project as Gmail; `gmail.readonly` + offline access added to the requested scopes)
 - [ ] Anthropic API key + spend limits
 
 ---

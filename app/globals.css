@@ -189,3 +189,21 @@
     background-size: 100% 100%, 8px 8px;
   }
 }
+
+/* Rotating conic-gradient border (e.g. the "Apply to all" CTA) */
+@keyframes border-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.animate-border-spin {
+  animation: border-spin 3s linear infinite;
+}
+
+/* Indeterminate scanning bar (dashboard "finding jobs" state) */
+@keyframes scan-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(410%); }
+}
+.animate-scan-slide {
+  animation: scan-slide 1.4s ease-in-out infinite;
+}

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
-import { useBetaModal } from "./beta-modal";
+import Link from "next/link";
 
 const navLinks = [
   { name: "How it works", href: "#how-it-works" },
@@ -15,7 +15,6 @@ const navLinks = [
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { open } = useBetaModal();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -72,10 +71,10 @@ export function Navigation() {
             </a> */}
             <Button
               size="sm"
-              onClick={open}
+              asChild
               className={`bg-foreground hover:bg-foreground/90 text-background rounded-full transition-all duration-500 cursor-pointer ${isScrolled ? "px-4 h-8 text-xs" : "px-6"}`}
             >
-              Join the beta
+              <Link href="/login">Get started</Link>
             </Button>
           </div>
 
@@ -140,13 +139,12 @@ export function Navigation() {
               Log in
             </Button> */}
             <Button
+              asChild
               className="flex-1 bg-foreground text-background rounded-full h-14 text-base cursor-pointer"
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                open();
-              }}
             >
-              Join the beta
+              <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                Get started
+              </Link>
             </Button>
           </div>
         </div>
