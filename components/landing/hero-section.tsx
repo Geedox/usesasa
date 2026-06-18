@@ -136,11 +136,9 @@ export function HeroSection() {
                 : "opacity-0 translate-y-4"
             }`}
           >
-            Sasa watches company career pages across Greenhouse, Lever, Ashby
-            and more, and surfaces roles that fit you, whether onsite, remote,
-            hybrid, local or international. It tailors your CV per role, submits
-            from your own browser, and pings you on WhatsApp when something needs
-            you. Keep your day job. We will do the applying.
+            Sasa finds roles that fit you across Greenhouse, Lever, Ashby and
+            more, tailors your CV per role, and applies from your own browser.
+            Keep your day job. We will do the applying.
           </p>
 
           {/* CTAs */}
