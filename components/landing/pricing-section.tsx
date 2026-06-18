@@ -60,9 +60,9 @@ export function PricingSection() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("https://ipwho.is/?fields=country_code");
-        const data = (await res.json()) as { country_code?: string };
-        if (alive && data?.country_code) setIsUSD(data.country_code !== "NG");
+        const res = await fetch("/api/geo");
+        const data = (await res.json()) as { country?: string | null };
+        if (alive && data?.country) setIsUSD(data.country !== "NG");
       } catch {
         /* keep the Naira default if detection fails */
       }
