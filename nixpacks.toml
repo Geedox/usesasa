@@ -1,0 +1,16 @@
+# Pin pnpm 11.5.3 (installed via npm, NOT corepack — corepack is broken on Railway's
+# Node images). This matches the repo's pnpm 10+ workspace file + lockfile, so the
+# build behaves exactly like local. Shared by the web and worker services; they differ
+# only in their deploy startCommand (railway.web.json / railway.worker.json).
+[variables]
+# Prod submits via Steel, so skip the Chromium download during install.
+PLAYWRIGHT_CHROMIUM = "0"
+
+[phases.install]
+cmds = [
+  "npm install -g pnpm@11.5.3",
+  "pnpm install --frozen-lockfile"
+]
+
+[phases.build]
+cmds = ["pnpm build"]
