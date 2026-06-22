@@ -23,6 +23,9 @@ export default async function ApplicationReviewPage({ params }: { params: Promis
       customAnswers: applications.customAnswers,
       tailoringValidation: applications.tailoringValidation,
       submissionNote: applications.submissionNote,
+      submissionViewUrl: applications.submissionViewUrl,
+      awaitingCode: applications.awaitingCode,
+      submissionLog: applications.submissionLog,
       jobTitle: jobs.title,
       jobLocation: jobs.location,
       company: companies.name,
@@ -62,6 +65,9 @@ export default async function ApplicationReviewPage({ params }: { params: Promis
       validation={{ clean: validation.clean !== false, fabrications: validation.fabrications ?? [], embellished: validation.embellished === true }}
       state={row.state}
       submissionNote={row.submissionNote ?? ""}
+      submissionViewUrl={row.submissionViewUrl ?? undefined}
+      awaitingCode={row.awaitingCode}
+      submissionLog={(row.submissionLog as { label: string; at: number; status: "active" | "done" | "error" }[] | null) ?? undefined}
     />
   );
 }

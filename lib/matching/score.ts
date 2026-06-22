@@ -40,12 +40,15 @@ function prefilter(keywords: string[], job: { title: string; rawJd: string }): b
 
 type ScoreResult = { score: number; reason: string };
 
-function profileBlurb(p: Profile): string {
-  return [
+function profileBlurb(p: Profile, prefs?: { targetRoles?: string[] | null; seniority?: string | null }): string {
+  const lines = [
     p.summary,
     `Recent roles: ${p.experience.slice(0, 4).map((e) => `${e.title} at ${e.company}`).join("; ")}`,
     `Skills: ${p.skills.slice(0, 25).join(", ")}`,
-  ].filter(Boolean).join("\n");
+  ];
+  if (prefs?.targetRoles?.length) lines.push(`Target roles the candidate wants: ${prefs.targetRoles.join(", ")}`);
+  if (prefs?.seniority) lines.push(`Seniority: ${prefs.seniority}`);
+  return lines.filter(Boolean).join("\n");
 }
 
 // Score a batch of jobs in one Haiku call. Returns one result per input job,
@@ -66,9 +69,17 @@ async function scoreBatch(
       {
         role: "user",
         content: `Score how well this candidate fits each job below, 0-100, with one short reason each.
-Be realistic but not harsh: a transferable, adjacent role should score 55-75, a strong direct fit 80+.
+
+First infer the candidate's FUNCTION (e.g. software engineering, data, design, product management, sales, marketing) from their recent roles and skills. Then score by real fit:
+- 80-100: same function, with clear overlap in skills/stack and seniority in range. A strong, realistic fit.
+- 60-79: same function, most key skills match, minor gaps.
+- 40-59: same function but a genuine stretch (seniority or tech-stack gap).
+- Below 35: a DIFFERENT function from the candidate (for a Software Engineer that means Product Manager, Designer, Sales, Marketing, Recruiter, etc.), OR skills barely overlap, even if some keywords appear in the text.
+
+Do NOT inflate scores for "adjacent" or "transferable" roles in a different function. Be honest. Most roles are not strong fits, and a wrong-function role must score below 35 even if the company or buzzwords look appealing.
+
 Return ONLY a JSON array, one object per job, in the same order:
-[{"i": <index>, "score": <0-100>, "reason": "<one sentence>"}]
+[{"i": <index>, "score": <0-100>, "reason": "<one sentence naming the function fit>"}]
 
 CANDIDATE:
 ${blurb}
@@ -98,6 +109,36 @@ ${jobList}`,
   });
 }
 
+// Score a single ad-hoc job (scraped by the extension widget) against the user's
+// profile, using the same rubric as the batch matcher. Returns null if there's no
+// profile or no API key. Not cached — the widget calls it for whatever page is open.
+export async function scoreJobForUser(
+  userId: string,
+  job: { title: string; location?: string; rawJd: string },
+): Promise<ScoreResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const profileRow = await db.query.profiles.findFirst({
+    where: and(eq(profiles.userId, userId), eq(profiles.isCurrent, true)),
+  });
+  if (!profileRow?.parsedData) return null;
+  const profile = normalizeProfile(profileRow.parsedData);
+
+  const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
+  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const blurb = profileBlurb(profile, {
+    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
+    seniority: prefs?.seniority ?? null,
+  });
+
+  const anthropic = new Anthropic({ apiKey });
+  const [result] = await scoreBatch(anthropic, blurb, [
+    { title: job.title, location: job.location ?? "", rawJd: job.rawJd },
+  ]);
+  return result ?? null;
+}
+
 // Score un-scored candidate jobs for a user and write matches (cached: pairs
 // already in `matches` are skipped, so re-runs don't re-call the LLM).
 export async function scoreUser(userId: string): Promise<{ scored: number }> {
@@ -110,8 +151,13 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   if (!profileRow?.parsedData) return { scored: 0 };
   const profile = normalizeProfile(profileRow.parsedData);
 
+  // Use the candidate's onboarding target roles + seniority alongside the CV.
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
-  void prefs; // reserved for richer pre-filtering later
+  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const prefsForBlurb = {
+    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
+    seniority: prefs?.seniority ?? null,
+  };
 
   const allJobs = await db.query.jobs.findMany({ where: eq(jobs.isActive, true) });
 
@@ -130,7 +176,7 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
     .slice(0, MAX_CANDIDATES);
 
   const anthropic = new Anthropic({ apiKey });
-  const blurb = profileBlurb(profile);
+  const blurb = profileBlurb(profile, prefsForBlurb);
   let scored = 0;
 
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {

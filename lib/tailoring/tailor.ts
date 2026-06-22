@@ -2,9 +2,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { applications, jobs, companies, profiles, preferences } from "@/lib/db/schema";
 import { normalizeProfile } from "@/lib/profile";
+import { getBalance, chargeForTailoring } from "@/lib/credits";
+import { isSubscriber, getEntitlement } from "@/lib/subscription";
 import { generateTailoring, type TailoredOutput } from "./generate";
+import { extractJdSignals } from "./extract-jd";
 import { validateNoFabrication } from "./validate";
-import { notifyReviewReady, notifyNeedsReview } from "@/lib/telegram";
+import { notifyReviewReady, notifyNeedsReview, notifySubmissionBlocked } from "@/lib/telegram";
 
 function combined(out: TailoredOutput): string {
   return [
@@ -18,7 +21,10 @@ function combined(out: TailoredOutput): string {
   ].join("\n");
 }
 
-export async function tailorApplication(applicationId: string): Promise<void> {
+export async function tailorApplication(
+  applicationId: string,
+  opts: { embellishOverride?: boolean } = {},
+): Promise<void> {
   const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
   if (!app) throw new Error(`application ${applicationId} not found`);
 
@@ -33,6 +39,24 @@ export async function tailorApplication(applicationId: string): Promise<void> {
   }
   const profile = normalizeProfile(profileRow.parsedData);
 
+  // Gate before spending the LLM. Subscribers (international) are metered by their
+  // monthly application allowance; everyone else (Nigeria / free) pays 1 credit.
+  const subscriber = await isSubscriber(app.userId);
+  if (subscriber) {
+    const ent = await getEntitlement(app.userId);
+    if (ent.remaining <= 0) {
+      const note = "You have reached your plan's application limit for this cycle. Upgrade or wait for the reset.";
+      await db.update(applications).set({ state: "needs_user", submissionNote: note }).where(eq(applications.id, applicationId));
+      await notifySubmissionBlocked(applicationId, "needs_user", note);
+      return;
+    }
+  } else if ((await getBalance(app.userId)) < 1) {
+    const note = "You are out of credits. Top up to tailor and submit this application.";
+    await db.update(applications).set({ state: "needs_user", submissionNote: note }).where(eq(applications.id, applicationId));
+    await notifySubmissionBlocked(applicationId, "needs_user", note);
+    return;
+  }
+
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, app.userId) });
   const appSettings = (prefs?.onboarding as {
     applicationSettings?: { resumeOptimization?: string; allowEmbellishment?: boolean };
@@ -41,11 +65,15 @@ export async function tailorApplication(applicationId: string): Promise<void> {
     appSettings?.resumeOptimization === "aggressive"
       ? "confident and keyword-forward, still strictly truthful"
       : "professional and direct";
-  // Only the user can switch this on (onboarding / settings). Default false.
-  const embellish = appSettings?.allowEmbellishment === true;
+  // A per-tailor override (from the extension widget toggle) wins; otherwise fall
+  // back to the user's saved setting (onboarding / settings). Default false.
+  const embellish = opts.embellishOverride ?? (appSettings?.allowEmbellishment === true);
 
   const company = await db.query.companies.findFirst({ where: eq(companies.id, job.companyId) });
-  const jobInput = { title: job.title, company: company?.name ?? "", rawJd: job.rawJd ?? "" };
+  // Pull the role's real requirements out of the post so tailoring aligns to them,
+  // not just the marketing intro (which is often all that fits in a naive slice).
+  const signals = await extractJdSignals(job.title, company?.name ?? "", job.rawJd ?? "");
+  const jobInput = { title: job.title, company: company?.name ?? "", rawJd: job.rawJd ?? "", signals };
   const jobForCheck = { company: jobInput.company, title: jobInput.title };
 
   let out: TailoredOutput;
@@ -89,6 +117,10 @@ export async function tailorApplication(applicationId: string): Promise<void> {
       };
     }),
   };
+
+  // Charge the 1 tailoring credit now that the work is done (credits users only;
+  // subscribers are metered by allowance at submission instead).
+  if (!subscriber) await chargeForTailoring(app.userId, applicationId);
 
   await db
     .update(applications)

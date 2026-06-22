@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Profile } from "@/lib/profile";
 import { stripDashes } from "@/lib/sanitize";
+import type { JdSignals } from "./extract-jd";
 
 export type TailoredOutput = {
   summary: string;
@@ -10,7 +11,7 @@ export type TailoredOutput = {
   answers: { whyCompany: string; whyRole: string; recentProject: string };
 };
 
-export type TailorJob = { title: string; company: string; rawJd: string };
+export type TailorJob = { title: string; company: string; rawJd: string; signals?: JdSignals | null };
 export type TailorOpts = { tone?: string; avoid?: string[]; embellish?: boolean };
 
 function profileFacts(p: Profile) {
@@ -23,12 +24,45 @@ function profileFacts(p: Profile) {
   });
 }
 
+// Which of this job's wanted skills the candidate genuinely has. We instruct the
+// model to LEAD with these (truthful alignment) rather than scatter generic skills.
+function skillOverlap(p: Profile, signals?: JdSignals | null): string[] {
+  if (!signals) return [];
+  const cand = p.skills.map((s) => s.toLowerCase().trim());
+  const wanted = [...new Set([...signals.requiredSkills, ...signals.keywords])];
+  return wanted.filter((w) => {
+    const lw = w.toLowerCase().trim();
+    return cand.some((c) => c === lw || c.includes(lw) || lw.includes(c));
+  });
+}
+
+// A focused brief of what the role wants, built from the extracted signals so the
+// model aligns to the real requirements even when they sit deep in a long post.
+function jobBrief(job: TailorJob): string {
+  const s = job.signals;
+  if (!s) return `Description:\n${job.rawJd.slice(0, 6000)}`;
+  const lines: string[] = [];
+  if (s.seniority) lines.push(`Seniority: ${s.seniority}`);
+  if (s.responsibilities.length) lines.push(`Key responsibilities:\n- ${s.responsibilities.join("\n- ")}`);
+  if (s.requiredSkills.length) lines.push(`Required skills/tools: ${s.requiredSkills.join(", ")}`);
+  if (s.niceToHave.length) lines.push(`Nice to have: ${s.niceToHave.join(", ")}`);
+  if (s.keywords.length) lines.push(`Keywords to mirror where truthful: ${s.keywords.join(", ")}`);
+  // Keep a trimmed slice of the raw post for any nuance the signals missed.
+  lines.push(`Full post (for context):\n${job.rawJd.slice(0, 3500)}`);
+  return lines.join("\n\n");
+}
+
 export async function generateTailoring(p: Profile, job: TailorJob, opts: TailorOpts = {}): Promise<TailoredOutput> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
   const avoidNote = opts.avoid?.length
     ? `\n\nA previous draft invented these claims. Do NOT include them or anything like them:\n- ${opts.avoid.join("\n- ")}`
+    : "";
+
+  const overlap = skillOverlap(p, job.signals);
+  const overlapNote = overlap.length
+    ? `\n\nSKILLS THE CANDIDATE ALREADY HAS THAT THIS ROLE WANTS (lead with these, use the job's wording): ${overlap.join(", ")}`
     : "";
 
   const prompt = `You tailor a candidate's application for a specific job.
@@ -39,8 +73,7 @@ ${profileFacts(p)}
 JOB:
 Title: ${job.title}
 Company: ${job.company}
-Description:
-${job.rawJd.slice(0, 4000)}
+${jobBrief(job)}${overlapNote}
 
 Produce, as JSON only:
 {
@@ -52,6 +85,7 @@ Produce, as JSON only:
 }
 
 Rules (critical):
+- ALIGN to this role: lead the summary and skills with the candidate's genuine strengths that match the role's responsibilities and required skills, and mirror the job's own terminology where it is truthful. Rewrite the bullets that are most relevant to the responsibilities first, framing real work in the language of this role. Do not bury the relevant experience.
 - Always set "originalTitle" to the candidate's exact title for that role.
 - "summary": rewrite the candidate's summary to align with this role and its keywords. Keep it true to their actual experience.
 - "skills": choose from the candidate's skills the ones most relevant to this job and order them by relevance${opts.embellish ? ", and you may add job-relevant skills the candidate did not list" : "; do NOT add skills the candidate did not list"}.
@@ -75,7 +109,10 @@ Return ONLY the JSON object.`;
 
   const anthropic = new Anthropic({ apiKey });
   const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    // Haiku for resume + cover tailoring: ~4x cheaper than Sonnet and strong enough
+    // for bullet rewriting / cover letters. Tailoring is included (not billed), so
+    // keeping its marginal cost low is what makes the credit model scalable.
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });

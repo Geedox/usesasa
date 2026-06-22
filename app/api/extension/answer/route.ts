@@ -38,6 +38,7 @@ export async function POST(req: Request) {
     contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string };
     location?: { city?: string; country?: string; state?: string };
     workEligibility?: { authorizedCountries?: string[]; needsSponsorship?: boolean; sponsorshipCountries?: string[] };
+    comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
   } | null) ?? {};
   const embellish = onboarding.applicationSettings?.allowEmbellishment === true;
 
@@ -55,6 +56,10 @@ export async function POST(req: Request) {
     authorizedCountries: onboarding.workEligibility?.authorizedCountries,
     needsSponsorship: onboarding.workEligibility?.needsSponsorship,
     sponsorshipCountries: onboarding.workEligibility?.sponsorshipCountries,
+    salaryExpectation: onboarding.comp?.salaryExpectation,
+    salaryPeriod: onboarding.comp?.salaryPeriod,
+    noticePeriod: onboarding.comp?.noticePeriod,
+    yearsExperience: onboarding.comp?.yearsExperience,
   };
 
   console.log(`[extension] answering ${questions.length} question(s) for app ${applicationId}`);

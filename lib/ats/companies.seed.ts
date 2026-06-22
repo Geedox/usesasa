@@ -60,6 +60,18 @@ export const GREENHOUSE_SLUGS: { slug: string; name: string }[] = [
   { slug: "twitch", name: "Twitch" },
   { slug: "udemy", name: "Udemy" },
   { slug: "webflow", name: "Webflow" },
+  { slug: "gitlab", name: "GitLab" },
+  { slug: "vercel", name: "Vercel" },
+  { slug: "postman", name: "Postman" },
+  { slug: "netlify", name: "Netlify" },
+  { slug: "mixpanel", name: "Mixpanel" },
+  { slug: "circleci", name: "CircleCI" },
+  { slug: "mattermost", name: "Mattermost" },
+  { slug: "planetscale", name: "PlanetScale" },
+  { slug: "turing", name: "Turing" },
+  { slug: "remote", name: "Remote" },
+  { slug: "paystack", name: "Paystack" },
+  { slug: "moniepoint", name: "Moniepoint" },
 ];
 
 // Companies with active Lever boards (validated live).
@@ -69,6 +81,7 @@ export const LEVER_SLUGS: { slug: string; name: string }[] = [
   { slug: "outreach", name: "Outreach" },
   { slug: "ro", name: "Ro" },
   { slug: "spotify", name: "Spotify" },
+  { slug: "nium", name: "Nium" }, // from the Nigeria/Africa list (verified live)
 ];
 
 // Companies with active Ashby boards (validated live).
@@ -99,6 +112,17 @@ export const ASHBY_SLUGS: { slug: string; name: string }[] = [
   { slug: "warp", name: "Warp" },
   { slug: "watershed", name: "Watershed" },
   { slug: "zed", name: "Zed" },
+  { slug: "zapier", name: "Zapier" },
+  { slug: "confluent", name: "Confluent" },
+  { slug: "temporal", name: "Temporal" },
+  { slug: "sentry", name: "Sentry" },
+  { slug: "render", name: "Render" },
+  { slug: "andela", name: "Andela" },
+  { slug: "mux", name: "Mux" },
+  // From the Nigeria/Africa career-page list (detected + verified live).
+  { slug: "m-kopa", name: "M-KOPA" },
+  { slug: "payscale", name: "Payscale" },
+  { slug: "close", name: "Close" },
 ];
 
 // Companies with SmartRecruiters boards (validated live; identifiers are case-sensitive).
@@ -115,8 +139,47 @@ export const SMARTRECRUITERS_SLUGS: { slug: string; name: string }[] = [
 ];
 
 // Workday tenants. The slug encodes "tenant|host|site" (Workday needs all three).
+// Workday is enterprise/mega-cap heavy (low odds for this audience), so we seed
+// none by default. Add only verified mid-size tenants here as "tenant|host|site".
 export const WORKDAY_SLUGS: { slug: string; name: string }[] = [
-  { slug: "nvidia|nvidia.wd5.myworkdayjobs.com|NVIDIAExternalCareerSite", name: "NVIDIA" },
+  // From the Nigeria/Africa career-page list (detected + verified live).
+  { slug: "scj|scj.wd5.myworkdayjobs.com|External_Career_Site", name: "SC Johnson" },
+  { slug: "mastercardfoundation|mastercardfoundation.wd10.myworkdayjobs.com|mastercardfdn", name: "Mastercard Foundation" },
+  { slug: "visa|visa.wd5.myworkdayjobs.com|Visa", name: "Visa" },
+];
+
+// Companies with active Workable boards (validated live; slug = the workable account).
+export const WORKABLE_SLUGS: { slug: string; name: string }[] = [
+  { slug: "kuda", name: "Kuda" },
+  { slug: "remotebase", name: "Remotebase" },
+  { slug: "helium-health", name: "Helium Health" },
+  // Nigeria/Africa batch (best-effort slugs; an empty/unknown board simply returns
+  // 0 and is harmless). The aggregators below carry the broad local + intern volume.
+  { slug: "moniepoint", name: "Moniepoint" },
+  { slug: "grey", name: "Grey" },
+  { slug: "mono", name: "Mono" },
+  { slug: "fairmoney", name: "FairMoney" },
+  { slug: "carbon", name: "Carbon" },
+  { slug: "lemfi", name: "LemFi" },
+  { slug: "nomba", name: "Nomba" },
+  { slug: "sabi", name: "Sabi" },
+  { slug: "vendease", name: "Vendease" },
+  { slug: "bamboo", name: "Bamboo" },
+];
+
+// Teamtailor accounts (slug = the teamtailor subdomain). Populated from the
+// career-page detector as real accounts are found.
+export const TEAMTAILOR_SLUGS: { slug: string; name: string }[] = [];
+
+// Recruitee accounts (slug = the recruitee subdomain).
+export const RECRUITEE_SLUGS: { slug: string; name: string }[] = [
+  { slug: "channable", name: "Channable" },
+];
+
+// BambooHR accounts (slug = the bamboohr subdomain).
+export const BAMBOOHR_SLUGS: { slug: string; name: string }[] = [
+  { slug: "klipfolio", name: "Klipfolio" },
+  { slug: "raenest", name: "Raenest" }, // from the Nigeria/Africa list (verified live)
 ];
 
 // Idempotent: insert any missing watched companies across all ATSes. Returns all.
@@ -127,6 +190,10 @@ export async function seedCompanies() {
     ...ASHBY_SLUGS.map((c) => ({ name: c.name, ats: "ashby" as const, atsSlug: c.slug })),
     ...SMARTRECRUITERS_SLUGS.map((c) => ({ name: c.name, ats: "smartrecruiters" as const, atsSlug: c.slug })),
     ...WORKDAY_SLUGS.map((c) => ({ name: c.name, ats: "workday" as const, atsSlug: c.slug })),
+    ...WORKABLE_SLUGS.map((c) => ({ name: c.name, ats: "workable" as const, atsSlug: c.slug })),
+    ...TEAMTAILOR_SLUGS.map((c) => ({ name: c.name, ats: "teamtailor" as const, atsSlug: c.slug })),
+    ...RECRUITEE_SLUGS.map((c) => ({ name: c.name, ats: "recruitee" as const, atsSlug: c.slug })),
+    ...BAMBOOHR_SLUGS.map((c) => ({ name: c.name, ats: "bamboohr" as const, atsSlug: c.slug })),
   ];
   await db
     .insert(companies)

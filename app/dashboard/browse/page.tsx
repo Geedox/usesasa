@@ -1,10 +1,16 @@
 import { and, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 import Link from "next/link";
-import { Search } from "lucide-react";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications } from "@/lib/db/schema";
 import { ApplyButton } from "@/components/dashboard/apply-button";
+import { AddYourOwn } from "@/components/dashboard/add-your-own";
+import { CompanyAvatar } from "@/components/dashboard/company-avatar";
+import { MatchRing } from "@/components/dashboard/match-ring";
+import { BrowseFilters } from "@/components/dashboard/browse-filters";
+import { CreditGate } from "@/components/dashboard/credit-gate";
+import { canUseSasa } from "@/lib/can-use";
+import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
 
 const PAGE_SIZE = 20;
 
@@ -66,20 +72,64 @@ function timeAgo(date: Date | null): string {
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; status?: string; loc?: string; lvl?: string; work?: string; sponsor?: string }>;
 }) {
   const session = await getSession();
   if (!session) return null;
-  const { page: pageParam, q, status: statusParam } = await searchParams;
+  const { page: pageParam, q, status: statusParam, loc: locParam, lvl: lvlParam, work: workParam, sponsor: sponsorParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const query = (q ?? "").trim();
   const status: FilterKey = (FILTERS.find((f) => f.key === statusParam)?.key ?? "all") as FilterKey;
+  const loc = (locParam ?? "").trim();
+  const lvl = SENIORITY.find((s) => s.key === lvlParam)?.key ?? "";
+  const work = WORKPLACE.find((w) => w.key === workParam)?.key ?? "";
+  const sponsor = sponsorParam === "1";
+  const blocked = !(await canUseSasa(session.user.id)).ok;
 
   const where = and(
     eq(matchesTable.userId, session.user.id),
-    query ? or(ilike(jobs.title, `%${query}%`), ilike(companies.name, `%${query}%`)) : undefined,
+    query ? or(ilike(jobs.title, `%${query}%`), ilike(companies.name, `%${query}%`), ilike(jobs.location, `%${query}%`)) : undefined,
     statusCondition(status),
+    locationCondition(loc),
+    seniorityCondition(lvl),
+    workplaceCondition(work),
+    sponsorCondition(sponsor),
   );
+
+  // Carry all active filters when building any link.
+  const buildUrl = (over: Record<string, string | number>) => {
+    const sp = new URLSearchParams();
+    if (status !== "all") sp.set("status", status);
+    if (query) sp.set("q", query);
+    if (loc) sp.set("loc", loc);
+    if (lvl) sp.set("lvl", lvl);
+    if (work) sp.set("work", work);
+    if (sponsor) sp.set("sponsor", "1");
+    for (const [k, v] of Object.entries(over)) { if (v === "") sp.delete(k); else sp.set(k, String(v)); }
+    const s = sp.toString();
+    return `/dashboard/browse${s ? `?${s}` : ""}`;
+  };
+
+  // Build the country/location chips from the user's own matched roles so they are
+  // relevant (last comma-segment of the location = the country/place).
+  const locRows = await db
+    .selectDistinct({ location: jobs.location })
+    .from(matchesTable)
+    .innerJoin(jobs, eq(matchesTable.jobId, jobs.id))
+    .where(eq(matchesTable.userId, session.user.id));
+  const counts = new Map<string, number>();
+  let hasRemote = false;
+  for (const r of locRows) {
+    const l = (r.location ?? "").trim();
+    if (!l) continue;
+    if (/remote/i.test(l)) hasRemote = true;
+    const country = l.split(",").pop()!.trim();
+    if (country && !/remote/i.test(country)) counts.set(country, (counts.get(country) ?? 0) + 1);
+  }
+  const locChips = [
+    ...(hasRemote ? ["Remote"] : []),
+    ...[...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c]) => c),
+  ];
 
   const base = db
     .select({
@@ -89,7 +139,9 @@ export default async function BrowsePage({
       remotePolicy: jobs.remotePolicy,
       postedAt: jobs.postedAt,
       company: companies.name,
+      logoUrl: companies.logoUrl,
       score: matchesTable.score,
+      reasons: matchesTable.reasons,
       appId: applications.id,
       appState: applications.state,
     })
@@ -114,24 +166,11 @@ export default async function BrowsePage({
 
   const totalCount = Number(total);
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const url = (p: Record<string, string | number>) => {
-    const sp = new URLSearchParams();
-    if (status !== "all") sp.set("status", status);
-    if (query) sp.set("q", query);
-    for (const [k, v] of Object.entries(p)) sp.set(k, String(v));
-    const s = sp.toString();
-    return `/dashboard/browse${s ? `?${s}` : ""}`;
-  };
-  const filterUrl = (key: string) => {
-    const sp = new URLSearchParams();
-    if (key !== "all") sp.set("status", key);
-    if (query) sp.set("q", query);
-    const s = sp.toString();
-    return `/dashboard/browse${s ? `?${s}` : ""}`;
-  };
+  const url = (p: Record<string, string | number>) => buildUrl(p);
 
   return (
-    <main className="max-w-[1100px] mx-auto px-6 lg:px-10 py-8">
+    <CreditGate blocked={blocked}>
+    <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-8">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl tracking-tight">Browse jobs</h1>
@@ -139,67 +178,58 @@ export default async function BrowsePage({
             Every role we have scored for you. {totalCount.toLocaleString()} {status === "all" ? "total" : "shown"}.
           </p>
         </div>
-        <form className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-background px-3 h-10 w-full sm:w-80">
-          {status !== "all" && <input type="hidden" name="status" value={status} />}
-          <Search className="w-4 h-4 text-muted-foreground" />
-          <input name="q" defaultValue={query} placeholder="Search title or company" className="flex-1 bg-transparent outline-none text-sm" />
-        </form>
       </div>
 
-      {/* Status filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        {FILTERS.map((f) => (
-          <Link
-            key={f.key}
-            href={filterUrl(f.key)}
-            className={`rounded-full px-3 py-1 text-sm cursor-pointer ${
-              status === f.key ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground hover:border-foreground/40"
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
+      {/* Sticky filter bar — the grid scrolls under it (like the dashboard) */}
+      <div className="sticky top-0 z-20 -mx-6 lg:-mx-10 px-6 lg:px-10 py-4 mb-6 bg-[#f6f7f8] border-b border-foreground/10">
+        <BrowseFilters
+          statuses={FILTERS.map((f) => ({ key: f.key, label: f.label }))}
+          levels={SENIORITY.map((s) => ({ key: s.key, label: s.label }))}
+          workplaces={WORKPLACE.map((w) => ({ key: w.key, label: w.label }))}
+          locChips={locChips}
+          initial={{ q: query, loc, status, lvl, work, sponsor }}
+        />
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-foreground/15 bg-background py-20 text-center">
-          <p className="font-display text-xl mb-2">Nothing here</p>
-          <p className="text-sm text-muted-foreground">
-            {query || status !== "all" ? "No roles match this filter." : "Run a search from the dashboard and scored roles will appear here."}
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-foreground/10 bg-background overflow-hidden">
-          {rows.map((m) => {
-            const badge = statusBadge(m.appState);
-            return (
-              <div key={m.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 border-b border-foreground/5 last:border-b-0">
-                <div className="w-12 text-center">
-                  <div className="font-display text-lg leading-none">{m.score}%</div>
-                  <div className="font-mono text-[9px] tracking-widest text-muted-foreground uppercase mt-1">match</div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-8">
+        {/* First card: add your own career page */}
+        <AddYourOwn variant="card" />
+
+        {rows.map((m) => {
+          const badge = statusBadge(m.appState);
+          return (
+            <div key={m.id} className="rounded-xl border border-foreground/10 bg-background p-5 flex flex-col min-h-[200px]">
+              <div className="flex items-start justify-between mb-4">
+                <div className="text-xs text-muted-foreground">
+                  <div>{m.location || (m.remotePolicy === "remote" ? "Remote" : "")}</div>
+                  <div>{timeAgo(m.postedAt)}</div>
                 </div>
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{m.title}</div>
-                  <div className="text-sm text-muted-foreground truncate">
-                    {m.company}
-                    {m.location ? ` · ${m.location}` : m.remotePolicy === "remote" ? " · Remote" : ""}
-                    {m.postedAt ? ` · ${timeAgo(m.postedAt)}` : ""}
-                  </div>
-                </div>
+                <MatchRing value={m.score} />
+              </div>
+              <h3 className="font-display text-xl tracking-tight mb-3 leading-snug line-clamp-2">{m.title}</h3>
+              <p className="text-sm text-muted-foreground mb-5 line-clamp-3">{(m.reasons as { reason?: string } | null)?.reason}</p>
+              <div className="flex items-center justify-between gap-2 mt-auto pt-2">
+                <span className="flex items-center gap-2 min-w-0">
+                  <CompanyAvatar name={m.company} logoUrl={m.logoUrl} size={28} />
+                  <span className="text-sm font-medium truncate">{m.company}</span>
+                </span>
                 {badge ? (
-                  <Link
-                    href={m.appId ? `/dashboard/applications/${m.appId}` : "#"}
-                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${badge.cls}`}
-                  >
+                  <Link href={m.appId ? `/dashboard/applications/${m.appId}` : "#"} className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${badge.cls}`}>
                     {badge.label}
                   </Link>
                 ) : (
                   <ApplyButton jobId={m.id} />
                 )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {rows.length === 0 && (
+        <p className="text-sm text-muted-foreground -mt-4 mb-8">
+          {query || status !== "all" || loc || lvl || work || sponsor ? "No roles match these filters." : "Run a search and scored roles will appear here."}
+        </p>
       )}
 
       {totalPages > 1 && (
@@ -222,5 +252,6 @@ export default async function BrowsePage({
         </div>
       )}
     </main>
+    </CreditGate>
   );
 }

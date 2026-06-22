@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { preferences, users } from "@/lib/db/schema";
 import { encryptSecret } from "@/lib/crypto";
 import { enqueueScoreUser } from "@/lib/queue";
 import { enqueueCrawlAll } from "@/lib/discovery/cycle";
+import { consumeSignupReferral } from "@/lib/referral";
 
 // Persists the onboarding wizard answers and marks the user onboarded.
 export async function POST(req: Request) {
@@ -49,6 +51,18 @@ export async function POST(req: Request) {
   // Only mark onboarded on the final step (autosaves pass finalize=false).
   if (finalize === true) {
     await db.update(users).set({ onboardedAt: new Date() }).where(eq(users.id, userId));
+
+    // Reward the referrer (+5, once) if this user signed up with a referral code.
+    try {
+      const jar = await cookies();
+      const refCode = jar.get("sasa_ref")?.value;
+      if (refCode) {
+        await consumeSignupReferral(userId, refCode);
+        jar.delete("sasa_ref");
+      }
+    } catch (err) {
+      console.error("[referral] signup reward failed:", err);
+    }
     // Kick off the first scan now so the dashboard fills in instead of sitting
     // empty, and the user does not wait for the scheduled cron. Best effort: a
     // queue hiccup must not fail onboarding.

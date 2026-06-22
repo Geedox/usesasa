@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
-import { creditLedger } from "@/lib/db/schema";
+import { creditLedger, mentors } from "@/lib/db/schema";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -17,9 +17,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const balance = rows.reduce((sum, r) => sum + r.delta, 0);
   const credits = rows.length > 0 ? balance : 5;
 
+  // Approved mentors get a Mentor dashboard link in the sidebar.
+  const mentor = await db.query.mentors.findFirst({ where: eq(mentors.userId, session.user.id) });
+
   return (
     <div className="flex min-h-screen bg-[#f6f7f8]">
-      <DashboardSidebar name={session.user.name ?? ""} email={session.user.email} credits={credits} />
+      <DashboardSidebar name={session.user.name ?? ""} email={session.user.email} credits={credits} isMentor={!!mentor} />
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );

@@ -10,6 +10,8 @@ import {
   Search,
   Inbox,
   KanbanSquare,
+  CalendarClock,
+  GraduationCap,
   User,
   Settings,
   MessageCircle,
@@ -21,8 +23,9 @@ import {
 const nav = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutGrid },
   { name: "Browse jobs", href: "/dashboard/browse", icon: Search },
-  { name: "Inbox", href: "#", icon: Inbox, badge: 0 },
-  { name: "Tracker", href: "#", icon: KanbanSquare },
+  { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+  { name: "Tracker", href: "/dashboard/tracker", icon: KanbanSquare },
+  { name: "Interview prep", href: "/dashboard/interview-prep", icon: CalendarClock },
   { name: "Profile", href: "/dashboard/profile", icon: User },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
@@ -37,14 +40,19 @@ export function DashboardSidebar({
   name,
   email,
   credits,
+  isMentor = false,
 }: {
   name: string;
   email: string;
   credits: number;
+  isMentor?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const navItems = isMentor
+    ? [...nav.slice(0, 5), { name: "Mentor", href: "/dashboard/mentor", icon: GraduationCap }, ...nav.slice(5)]
+    : nav;
 
   return (
     <aside className="w-64 shrink-0 border-r border-foreground/10 bg-background flex flex-col h-screen sticky top-0">
@@ -58,7 +66,7 @@ export function DashboardSidebar({
 
       {/* Nav */}
       <nav className="px-3 mt-2 flex flex-col gap-0.5">
-        {nav.map((item) => {
+        {navItems.map((item) => {
           const active = item.href === pathname;
           return (
             <Link
@@ -72,11 +80,6 @@ export function DashboardSidebar({
             >
               <item.icon className="w-4 h-4" />
               <span className="flex-1">{item.name}</span>
-              {typeof item.badge === "number" && (
-                <span className="text-xs text-muted-foreground">
-                  {item.badge}
-                </span>
-              )}
             </Link>
           );
         })}
@@ -112,13 +115,13 @@ export function DashboardSidebar({
         </div>
         <div className="text-xs text-background/60 truncate mb-3">{email}</div>
         <div className="flex items-baseline justify-between">
-          <span className="text-xs text-background/70">Applications left</span>
+          <span className="text-xs text-background/70">Credits</span>
           <span className="font-display text-2xl">{credits}</span>
         </div>
-        <div className="text-[11px] text-background/50 mb-3">Free plan</div>
-        <button className="w-full rounded-lg bg-background text-foreground text-sm py-2 cursor-pointer hover:bg-background/90">
+        <div className="text-[11px] text-background/50 mb-3">Tailor 1 · Submit 1 · Interview 24</div>
+        <Link href="/dashboard/settings?tab=billing" className="block w-full text-center rounded-lg bg-background text-foreground text-sm py-2 cursor-pointer hover:bg-background/90">
           Buy more credits
-        </button>
+        </Link>
         <button
           onClick={async () => {
             setSigningOut(true);

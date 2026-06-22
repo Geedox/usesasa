@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, AlertTriangle, Download } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Download, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { diffWords } from "@/lib/diff";
@@ -22,6 +22,9 @@ export function ApplicationReview({
   validation,
   state,
   submissionNote,
+  submissionViewUrl,
+  awaitingCode,
+  submissionLog,
 }: {
   applicationId: string;
   job: { title: string; company: string; location: string };
@@ -33,6 +36,9 @@ export function ApplicationReview({
   validation: { clean: boolean; fabrications: string[]; embellished?: boolean };
   state: string;
   submissionNote?: string;
+  submissionViewUrl?: string;
+  awaitingCode?: boolean;
+  submissionLog?: { label: string; at: number; status: "active" | "done" | "error" }[];
 }) {
   const router = useRouter();
   const [roles, setRoles] = useState<RoleCv[]>(experience);
@@ -43,6 +49,28 @@ export function ApplicationReview({
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState("");
+  const [code, setCode] = useState("");
+  const [submittingCode, setSubmittingCode] = useState(false);
+  const [codeMsg, setCodeMsg] = useState("");
+
+  const submitCode = async () => {
+    setSubmittingCode(true);
+    setCodeMsg("");
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j.ok) router.refresh();
+      else setCodeMsg(j.reason || j.error || "That code did not complete it. Check it and try again.");
+    } catch {
+      setCodeMsg("Could not reach the server. Try again.");
+    } finally {
+      setSubmittingCode(false);
+    }
+  };
 
   useEffect(() => {
     const h = (e: BeforeUnloadEvent) => {
@@ -54,6 +82,14 @@ export function ApplicationReview({
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
   }, [dirty]);
+
+  // While a submission is in flight (or just queued), auto-refresh so the live
+  // browser and status appear and update without the user reloading the page.
+  useEffect(() => {
+    if (state !== "queued" && state !== "sending") return;
+    const id = setInterval(() => router.refresh(), 4000);
+    return () => clearInterval(id);
+  }, [state, router]);
 
   const setBullet = (ri: number, bi: number, val: string) => {
     setRoles((rs) => rs.map((r, i) => (i === ri ? { ...r, rewrittenBullets: r.rewrittenBullets.map((b, j) => (j === bi ? val : b)) } : r)));
@@ -134,15 +170,44 @@ export function ApplicationReview({
         </div>
       )}
 
-      {submissionNote && (state === "needs_user" || state === "failed") && (
+      {/* Paused for an emailed verification code — ask the user for it. */}
+      {state === "needs_user" && awaitingCode && (
+        <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 mb-8">
+          <div className="font-medium text-blue-900 mb-1">Enter the code from your email</div>
+          <p className="text-sm text-blue-900/80 mb-3">{submissionNote || "This employer emailed you a verification code to finish the application."}</p>
+          <div className="flex items-center gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Verification code"
+              className="border border-blue-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+            />
+            <Button onClick={submitCode} disabled={submittingCode || !code.trim()} className="h-10 px-5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer">
+              {submittingCode ? "Entering…" : "Enter code & finish"}
+            </Button>
+          </div>
+          {codeMsg && <p className="text-sm text-red-600 mt-2">{codeMsg}</p>}
+          {submissionViewUrl && (
+            <div className="mt-4 rounded-lg border border-blue-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
+              <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {submissionNote && ((state === "needs_user" && !awaitingCode) || state === "failed") && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-8">
           <div className="flex items-center gap-2 text-amber-800 font-medium mb-1">
             <AlertTriangle className="w-4 h-4" /> Could not finish submitting
           </div>
           <p className="text-sm text-amber-800">
-            {submissionNote}. Open the job to complete it yourself, or edit below and approve to try again. Nothing was
-            sent and no credit was used.
+            {submissionNote}. {submissionViewUrl ? "Finish it in the live browser below, or edit and approve to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
           </p>
+          {submissionViewUrl && (
+            <div className="mt-4 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
+              <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
+            </div>
+          )}
         </div>
       )}
 
@@ -277,10 +342,34 @@ export function ApplicationReview({
             </p>
             <p className="text-sm text-muted-foreground">
               {state === "submitted"
-                ? "This application was submitted from your browser."
-                : "Approved. The Chrome extension submits this from your browser when you run it. Watch the extension popup for progress."}
+                ? "This application was submitted for you in the cloud."
+                : state === "sending"
+                  ? "Filling and submitting it in a cloud browser now. Watch it live on the left; take over for a captcha or tricky field anytime."
+                  : "Approved and queued. It will be submitted in a cloud browser shortly."}
             </p>
           </div>
+          {(state === "sending" || state === "queued") && (
+            <div className="mt-4 grid lg:grid-cols-[1fr_300px] gap-4">
+              {/* Live browser */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Live browser</p>
+                  {submissionViewUrl && <a href={submissionViewUrl} target="_blank" rel="noreferrer" className="text-sm underline underline-offset-4">Full screen</a>}
+                </div>
+                {submissionViewUrl ? (
+                  <div className="rounded-lg border border-foreground/10 overflow-hidden bg-black/5" style={{ aspectRatio: "16 / 10" }}>
+                    <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" allow="clipboard-write" />
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] flex items-center justify-center text-sm text-muted-foreground" style={{ aspectRatio: "16 / 10" }}>
+                    <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Starting the browser…</span>
+                  </div>
+                )}
+              </div>
+              {/* Streaming progress */}
+              <SubmissionActivity steps={submissionLog ?? []} />
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex items-center gap-3 pb-6">
@@ -294,5 +383,37 @@ export function ApplicationReview({
         </div>
       )}
     </main>
+  );
+}
+
+// Live progress feed for an in-flight submission — a check for finished steps and
+// a spinning loader on the one in progress. Refreshed by the page's polling.
+function SubmissionActivity({ steps }: { steps: { label: string; at: number; status: "active" | "done" | "error" }[] }) {
+  return (
+    <div className="rounded-lg border border-foreground/10 bg-background p-4 h-fit">
+      <p className="text-sm font-medium mb-4">Live progress</p>
+      {steps.length === 0 ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Getting started…
+        </div>
+      ) : (
+        <ol className="space-y-3">
+          {steps.map((s, i) => (
+            <li key={i} className="flex items-start gap-3 text-sm">
+              <span className="mt-0.5 shrink-0">
+                {s.status === "done" ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                ) : s.status === "error" ? (
+                  <XCircle className="w-4 h-4 text-red-600" />
+                ) : (
+                  <Loader2 className="w-4 h-4 animate-spin text-foreground" />
+                )}
+              </span>
+              <span className={s.status === "active" ? "font-medium" : "text-muted-foreground"}>{s.label}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

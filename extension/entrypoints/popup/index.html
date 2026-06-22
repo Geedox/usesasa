@@ -113,8 +113,8 @@
       <!-- SETUP -->
       <section id="setup" class="card hidden">
         <p class="lead">Connect the extension to submit your approved applications from this browser.</p>
-        <label for="baseUrl">App URL</label>
-        <input id="baseUrl" placeholder="http://localhost:3000" />
+        <label for="baseUrl">App URL (optional)</label>
+        <input id="baseUrl" placeholder="https://usesasa.xyz" />
         <label for="token">Connect token</label>
         <input id="token" type="password" placeholder="Paste from Settings" />
         <button id="connect" class="primary">Connect</button>
@@ -139,6 +139,7 @@
         </div>
 
         <button id="run" class="primary">Submit queued applications</button>
+        <label class="autosubmit"><input id="autoSubmit" type="checkbox" /> Auto-submit new approvals while Chrome is open</label>
 
         <!-- live progress during a run -->
         <div id="progress" class="progress hidden">

@@ -1,4 +1,4 @@
-import { getConfig, setConfig } from "@/lib/config";
+import { getConfig, setConfig, DEFAULT_BASE_URL } from "@/lib/config";
 import { fetchStats } from "@/lib/api";
 
 const STATE_LABEL: Record<string, string> = {
@@ -79,14 +79,20 @@ async function refreshCounts(): Promise<boolean> {
 async function render() {
   const cfg = await getConfig();
   inp("baseUrl").value = cfg.baseUrl;
+  inp("autoSubmit").checked = cfg.autoSubmit;
   if (cfg.token) {
     inp("token").value = cfg.token;
     show("connected");
+    void chrome.runtime.sendMessage({ type: "poll" }).catch(() => {});
     await refreshCounts();
   } else {
     show("setup");
   }
 }
+
+inp("autoSubmit").addEventListener("change", async () => {
+  await setConfig({ autoSubmit: inp("autoSubmit").checked });
+});
 
 el<HTMLButtonElement>("connect").addEventListener("click", async () => {
   const baseUrl = inp("baseUrl").value.trim().replace(/\/$/, "");
@@ -98,7 +104,7 @@ el<HTMLButtonElement>("connect").addEventListener("click", async () => {
   const btn = el<HTMLButtonElement>("connect");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Connecting';
-  await setConfig({ baseUrl: baseUrl || "http://localhost:3000", token });
+  await setConfig({ baseUrl: baseUrl || DEFAULT_BASE_URL, token });
   show("connected");
   const ok = await refreshCounts();
   btn.disabled = false;

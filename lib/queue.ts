@@ -9,14 +9,21 @@ export const QUEUES = {
   DISCOVER_AGGREGATOR: "discover_aggregator",
   SCORE_USER: "score_user",
   TAILOR_APPLICATION: "tailor_application",
+  SUBMIT_APPLICATION: "submit_application", // cloud submit: fill + submit in a headless browser
   DISCOVER_TICK: "discover_tick", // cron-driven: crawl boards + score every onboarded user
+  INTERVIEW_REMINDER: "interview_reminder", // delayed: nudge before an interview-prep call
+  AUTO_GRAB_CODE: "auto_grab_code", // delayed: pull an emailed OTP from Gmail and resume a paused submit
 } as const;
 
 export type ParseCvJob = { profileId: string; cvPublicId: string };
 export type DiscoverCompanyJob = { companyId: string; slug: string; ats: Ats };
-export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" };
+export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" };
 export type ScoreUserJob = { userId: string };
-export type TailorApplicationJob = { applicationId: string };
+export type TailorApplicationJob = { applicationId: string; embellish?: boolean };
+export type SubmitApplicationJob = { applicationId: string };
+export type InterviewReminderKind = "24h" | "1h" | "10min";
+export type InterviewReminderJob = { bookingId: string; kind: InterviewReminderKind };
+export type AutoGrabCodeJob = { applicationId: string; attempt: number };
 
 declare global {
   // eslint-disable-next-line no-var
@@ -34,7 +41,10 @@ async function createBoss(): Promise<PgBoss> {
   await boss.createQueue(QUEUES.DISCOVER_AGGREGATOR);
   await boss.createQueue(QUEUES.SCORE_USER);
   await boss.createQueue(QUEUES.TAILOR_APPLICATION);
+  await boss.createQueue(QUEUES.SUBMIT_APPLICATION);
   await boss.createQueue(QUEUES.DISCOVER_TICK);
+  await boss.createQueue(QUEUES.INTERVIEW_REMINDER);
+  await boss.createQueue(QUEUES.AUTO_GRAB_CODE);
   return boss;
 }
 
@@ -70,4 +80,25 @@ export async function enqueueScoreUser(data: ScoreUserJob, startAfterSeconds = 0
 export async function enqueueTailorApplication(data: TailorApplicationJob): Promise<string | null> {
   const boss = await getBoss();
   return boss.send(QUEUES.TAILOR_APPLICATION, data, { retryLimit: 3, retryBackoff: true });
+}
+
+export async function enqueueSubmitApplication(data: SubmitApplicationJob): Promise<string | null> {
+  const boss = await getBoss();
+  // Cloud submit is heavy (a headless browser) and must not double-submit, so no
+  // automatic retries — a failed run lands in needs_user/failed for the user.
+  return boss.send(QUEUES.SUBMIT_APPLICATION, data, { retryLimit: 0 });
+}
+
+// Schedule a reminder to fire at a specific time (24h / 1h / 10min before a call).
+// `startAfter` is the absolute Date to deliver at; pg-boss holds it until then.
+export async function enqueueInterviewReminder(data: InterviewReminderJob, startAfter: Date): Promise<string | null> {
+  const boss = await getBoss();
+  return boss.send(QUEUES.INTERVIEW_REMINDER, data, { retryLimit: 3, retryBackoff: true, startAfter });
+}
+
+// Poll Gmail (after a short delay) for the verification code a paused submission is
+// waiting on. No retries — the handler re-enqueues itself until it finds one or gives up.
+export async function enqueueAutoGrabCode(data: AutoGrabCodeJob, startAfterSeconds = 8): Promise<string | null> {
+  const boss = await getBoss();
+  return boss.send(QUEUES.AUTO_GRAB_CODE, data, { retryLimit: 0, startAfter: startAfterSeconds });
 }

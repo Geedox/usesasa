@@ -5,17 +5,16 @@ export default defineConfig({
   dev: {
     server: { port: 3001 },
   },
-  manifest: {
+  // Manifest is a function so the localhost host permission is only added to dev
+  // builds. Production (pnpm build / pnpm zip) ships https only, which keeps the
+  // Web Store review clean.
+  manifest: ({ mode }) => ({
     name: "Sasa",
     description: "Apply to jobs, hands off. Submits your queued applications from your own browser.",
-    permissions: ["storage", "tabs", "scripting"],
-    host_permissions: [
-      "http://localhost:3000/*",
-      "https://usesasa.xyz/*",
-      "https://*.greenhouse.io/*",
-      "https://*.lever.co/*",
-      "https://*.ashbyhq.com/*",
-      "https://res.cloudinary.com/*",
-    ],
-  },
+    permissions: ["storage", "tabs", "scripting", "alarms", "webNavigation"],
+    // Broad host access so the universal autofill widget can detect and prefill a
+    // job form on any career page on the web (the Tsenta-style flow).
+    host_permissions:
+      mode === "development" ? ["https://*/*", "http://localhost:3000/*"] : ["https://*/*"],
+  }),
 });

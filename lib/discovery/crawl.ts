@@ -8,6 +8,14 @@ import { fetchLeverJobs } from "@/lib/ats/lever";
 import { fetchAshbyJobs } from "@/lib/ats/ashby";
 import { fetchSmartRecruitersJobs } from "@/lib/ats/smartrecruiters";
 import { fetchWorkdayJobs } from "@/lib/ats/workday";
+import { fetchWorkableJobs } from "@/lib/ats/workable";
+import { fetchTeamtailorJobs } from "@/lib/ats/teamtailor";
+import { fetchRecruiteeJobs } from "@/lib/ats/recruitee";
+import { fetchBambooHrJobs } from "@/lib/ats/bamboohr";
+import { fetchBreezyJobs } from "@/lib/ats/breezy";
+import { fetchPersonioJobs } from "@/lib/ats/personio";
+import { fetchGemJobs } from "@/lib/ats/gem";
+import { fetchCustomJobs } from "@/lib/ats/custom";
 
 const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>> = {
   greenhouse: fetchGreenhouseJobs,
@@ -15,6 +23,14 @@ const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>>
   ashby: fetchAshbyJobs,
   smartrecruiters: fetchSmartRecruitersJobs,
   workday: fetchWorkdayJobs,
+  workable: fetchWorkableJobs,
+  teamtailor: fetchTeamtailorJobs,
+  recruitee: fetchRecruiteeJobs,
+  bamboohr: fetchBambooHrJobs,
+  breezy: fetchBreezyJobs,
+  personio: fetchPersonioJobs,
+  gem: fetchGemJobs,
+  custom: fetchCustomJobs, // slug = the careers-page URL
 };
 
 // Fetch a company's postings from its ATS and upsert into `jobs` (idempotent on

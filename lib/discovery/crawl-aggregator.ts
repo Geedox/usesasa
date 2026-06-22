@@ -3,8 +3,19 @@ import { db } from "@/lib/db";
 import { companies, jobs } from "@/lib/db/schema";
 import { fetchRemoteOkJobs, type AggregatorJob } from "@/lib/ats/remoteok";
 import { fetchWeWorkRemotelyJobs } from "@/lib/ats/weworkremotely";
+import { fetchMyJobMagJobs } from "@/lib/ats/myjobmag";
+import { fetchJobbermanJobs } from "@/lib/ats/jobberman";
+import { fetchTheHubJobs } from "@/lib/ats/thehub";
 
-export type AggregatorSource = "remoteok" | "weworkremotely";
+export type AggregatorSource = "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub";
+
+const FETCHERS: Record<AggregatorSource, () => Promise<AggregatorJob[]>> = {
+  remoteok: fetchRemoteOkJobs,
+  weworkremotely: fetchWeWorkRemotelyJobs,
+  myjobmag: fetchMyJobMagJobs,
+  jobberman: fetchJobbermanJobs,
+  thehub: fetchTheHubJobs,
+};
 
 function slugify(name: string): string {
   return (
@@ -15,8 +26,7 @@ function slugify(name: string): string {
 // Aggregators surface jobs from arbitrary employers. We create a company row per
 // employer (ats = the aggregator) so the long tail of small companies is captured.
 export async function crawlAggregator(source: AggregatorSource): Promise<number> {
-  const items: AggregatorJob[] =
-    source === "remoteok" ? await fetchRemoteOkJobs() : await fetchWeWorkRemotelyJobs();
+  const items: AggregatorJob[] = await FETCHERS[source]();
   if (items.length === 0) return 0;
 
   // Unique employers -> company rows.

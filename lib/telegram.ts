@@ -3,8 +3,9 @@ import { ProxyAgent } from "undici";
 import { db } from "@/lib/db";
 import { users, applications, jobs, companies, matches } from "@/lib/db/schema";
 import { SITE_URL } from "@/lib/site";
-import { enqueueTailorApplication } from "@/lib/queue";
+import { enqueueTailorApplication, enqueueSubmitApplication } from "@/lib/queue";
 import { generateResumePdf } from "@/lib/resume-pdf";
+import { canUseSasa } from "@/lib/can-use";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = (method: string) => `https://api.telegram.org/bot${TOKEN}/${method}`;
@@ -35,10 +36,9 @@ async function call<T = unknown>(method: string, body?: Record<string, unknown>)
       return null;
     }
     return data.result ?? null;
-  } catch (err) {
-    // Keep it to one concise line (no stack dump) — the polling loop handles backoff.
-    const cause = (err as { cause?: { code?: string } })?.cause?.code;
-    console.warn(`[telegram] ${method} unreachable${cause ? ` (${cause})` : ""}`);
+  } catch {
+    // Silent: callers decide whether/how to log (the polling loop reports once and
+    // backs off, so we don't flood the terminal when Telegram is network-blocked).
     return null;
   }
 }
@@ -179,6 +179,17 @@ export async function notifySubmissionBlocked(
   const job = await db.query.jobs.findFirst({ where: eq(jobs.id, app.jobId) });
   const company = job ? await db.query.companies.findFirst({ where: eq(companies.id, job.companyId) }) : null;
 
+  // Paused waiting for an emailed verification code: ask the user to just reply
+  // with the code; the next text message they send is treated as the code.
+  if (app.awaitingCode) {
+    const text =
+      `<b>${escapeHtml(company?.name ?? "a company")}: ${escapeHtml(job?.title ?? "a role")}</b>\n` +
+      `${escapeHtml(note)}\n\n` +
+      `Reply to this chat with the code and I will enter it and finish the application.`;
+    await sendMessage(user.telegramChatId, text);
+    return;
+  }
+
   const lead =
     result === "needs_user"
       ? "I filled most of this, but it needs something I cannot answer for you:"
@@ -293,6 +304,15 @@ async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Prom
     return;
   }
 
+  // Block credit-spending actions when the user has no credits / allowance left.
+  const blockedNoCredit = async (): Promise<boolean> => {
+    const can = await canUseSasa(user.id);
+    if (can.ok) return false;
+    await answerCallback(cb.id, can.error);
+    await editText(String(chatId), messageId, `${can.error} Open Sasa to top up, then try again.`);
+    return true;
+  };
+
   // Gate 1 actions operate on a match (targetId = jobId).
   if (action === "apply" || action === "pass") {
     const match = await db.query.matches.findFirst({
@@ -308,6 +328,7 @@ async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Prom
       await editText(String(chatId), messageId, "Skipped. I will not apply to this one.");
       return;
     }
+    if (await blockedNoCredit()) return;
     // apply → create the application (dedup-safe) and tailor it; gate 2 follows when ready.
     await db.update(matches).set({ userAction: "queued" }).where(eq(matches.id, match.id));
     const [created] = await db
@@ -332,18 +353,23 @@ async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Prom
   }
 
   if (action === "redo") {
+    if (await blockedNoCredit()) return;
     await db.update(applications).set({ state: "drafted" }).where(eq(applications.id, appId));
     await enqueueTailorApplication({ applicationId: appId });
     await answerCallback(cb.id, "Rewriting.");
     await editText(String(chatId), messageId, "Rewriting it without those claims. I will message you when it is ready.");
   } else if (action === "requeue") {
+    if (await blockedNoCredit()) return;
     await db.update(applications).set({ state: "queued", submissionNote: null }).where(eq(applications.id, appId));
-    await answerCallback(cb.id, "Queued again.");
-    await editText(String(chatId), messageId, "Queued again. Run Submit in the extension to retry it.");
+    await enqueueSubmitApplication({ applicationId: appId });
+    await answerCallback(cb.id, "Submitting again.");
+    await editText(String(chatId), messageId, "On it. I am submitting this one again in the cloud and will confirm here when it is done.");
   } else if (action === "approve") {
+    if (await blockedNoCredit()) return;
     await db.update(applications).set({ state: "queued" }).where(eq(applications.id, appId));
-    await answerCallback(cb.id, "Queued for submission.");
-    await editText(String(chatId), messageId, "Queued. Open the Sasa extension to submit it from your browser.");
+    await enqueueSubmitApplication({ applicationId: appId });
+    await answerCallback(cb.id, "Submitting now.");
+    await editText(String(chatId), messageId, "Approved. I am submitting it in the cloud now and will confirm here when it is done.");
   } else if (action === "skip") {
     await db.update(applications).set({ state: "dismissed" }).where(eq(applications.id, appId));
     await answerCallback(cb.id, "Skipped.");
@@ -356,10 +382,29 @@ async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Prom
 async function processUpdate(u: TgUpdate): Promise<void> {
   if (u.message?.text) {
     const m = u.message.text.match(/^\/start\s+(\S+)/);
-    if (m) await handleStart(u.message.chat.id, m[1]);
+    if (m) { await handleStart(u.message.chat.id, m[1]); return; }
+    if (!u.message.text.startsWith("/")) await handleCodeReply(u.message.chat.id, u.message.text.trim());
   } else if (u.callback_query) {
     await handleCallback(u.callback_query);
   }
+}
+
+// A plain text reply is treated as the verification code for the user's most
+// recent application paused awaiting a code.
+async function handleCodeReply(chatId: number | string, text: string): Promise<void> {
+  if (!/^[A-Za-z0-9\-]{3,12}$/.test(text)) return; // looks like a code, not chatter
+  const user = await db.query.users.findFirst({ where: eq(users.telegramChatId, String(chatId)) });
+  if (!user) return;
+  const app = await db.query.applications.findFirst({
+    where: and(eq(applications.userId, user.id), eq(applications.awaitingCode, true)),
+    orderBy: (a, { desc }) => [desc(a.createdAt)],
+  });
+  if (!app) return;
+  await sendMessage(String(chatId), "Got it. Entering the code and finishing the application now…");
+  const { resumeWithCode } = await import("@/lib/submit/steel");
+  const r = await resumeWithCode(app.id, text);
+  if (r.result === "submitted") await sendMessage(String(chatId), "Done. Your application was submitted.");
+  else await sendMessage(String(chatId), `That did not complete it: ${escapeHtml(r.reason ?? "unknown")}. You can open the dashboard to finish it.`);
 }
 
 // Long-poll getUpdates forever. Runs in the worker; no public webhook needed.
@@ -369,7 +414,15 @@ export async function startTelegramPolling(): Promise<void> {
     return;
   }
   const username = await getBotUsername();
-  console.log(`[telegram] polling as @${username ?? "?"}`);
+  if (username) {
+    console.log(`[telegram] polling as @${username}`);
+  } else {
+    console.warn(
+      "[telegram] cannot reach api.telegram.org from this network (often an ISP block of Telegram). " +
+        "Nudges are paused; the agent still works on the dashboard. Set HTTPS_PROXY or use a VPN to enable Telegram. " +
+        "On the deployed worker this works without a proxy.",
+    );
+  }
 
   let offset = 0;
   let failures = 0;

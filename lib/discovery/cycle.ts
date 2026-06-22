@@ -4,6 +4,7 @@ import { users, applications } from "@/lib/db/schema";
 import { seedCompanies } from "@/lib/ats/companies.seed";
 import { enqueueDiscoverCompany, enqueueDiscoverAggregator, enqueueScoreUser } from "@/lib/queue";
 import { notifySubmissionBlocked, notifyNeedsReview } from "@/lib/telegram";
+import { canUseSasa } from "@/lib/can-use";
 
 // Enqueue a crawl of every watched board + the aggregators. Shared by the manual
 // "Find jobs" button and the scheduled tick so they behave identically.
@@ -14,6 +15,9 @@ export async function enqueueCrawlAll(): Promise<number> {
   }
   await enqueueDiscoverAggregator({ source: "remoteok" });
   await enqueueDiscoverAggregator({ source: "weworkremotely" });
+  await enqueueDiscoverAggregator({ source: "myjobmag" });
+  await enqueueDiscoverAggregator({ source: "jobberman" });
+  await enqueueDiscoverAggregator({ source: "thehub" });
   return all.length;
 }
 
@@ -28,8 +32,14 @@ export async function runAutonomousCycle(scoreDelaySeconds = 180): Promise<{ com
     .from(users)
     .where(isNotNull(users.onboardedAt));
 
+  // Only score users who can actually use Sasa. No credits (or expired credits, or a
+  // used-up plan) means the expensive per-user LLM scoring is skipped until they top
+  // up, so we never burn the model matching jobs for someone who can't apply.
+  let scoredUsers = 0;
   for (const u of onboarded) {
+    if (!(await canUseSasa(u.id)).ok) continue;
     await enqueueScoreUser({ userId: u.id }, scoreDelaySeconds);
+    scoredUsers++;
   }
 
   // Re-surface anything stuck so it keeps coming back until it is submitted,
@@ -39,7 +49,11 @@ export async function runAutonomousCycle(scoreDelaySeconds = 180): Promise<{ com
   // Retention: drop matches the user never acted on after 60 days.
   const purged = await purgeStaleMatches(60);
 
-  return { companies, users: onboarded.length, renudged, purged };
+  // Give newly-watched companies a logo (capped per run; best-effort).
+  const { backfillCompanyLogos } = await import("@/lib/ats/logo");
+  await backfillCompanyLogos(200).catch(() => 0);
+
+  return { companies, users: scoredUsers, renudged, purged };
 }
 
 // Delete matches older than `days` that the user never acted on: not queued, and

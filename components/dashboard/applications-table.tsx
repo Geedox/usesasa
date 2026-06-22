@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
 
@@ -49,6 +50,15 @@ function timeAgo(iso: string | null): string {
 export function ApplicationsTable({ rows }: { rows: AppRow[] }) {
   const [tab, setTab] = useState("All");
   const [query, setQuery] = useState("");
+  const router = useRouter();
+
+  // Auto-refresh while anything is in flight so the Live badge + statuses update
+  // without the user reloading.
+  useEffect(() => {
+    if (!rows.some((r) => r.state === "queued" || r.state === "sending")) return;
+    const id = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(id);
+  }, [rows, router]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -117,7 +127,15 @@ export function ApplicationsTable({ rows }: { rows: AppRow[] }) {
             </span>
             <span className="text-muted-foreground">{a.cvReady ? "Ready" : "—"}</span>
             <span className="text-muted-foreground">{a.coverReady ? "Ready" : "Off"}</span>
-            <span><span className="rounded-md bg-foreground/[0.05] px-2 py-0.5 text-xs">{STATE_LABEL[a.state] ?? a.state}</span></span>
+            <span>
+              {a.state === "sending" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-green-100 text-green-800 px-2 py-0.5 text-xs font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-600 animate-pulse" /> Live · watch
+                </span>
+              ) : (
+                <span className="rounded-md bg-foreground/[0.05] px-2 py-0.5 text-xs">{STATE_LABEL[a.state] ?? a.state}</span>
+              )}
+            </span>
             <span className="text-muted-foreground">{timeAgo(a.appliedAt)}</span>
           </Link>
         ))

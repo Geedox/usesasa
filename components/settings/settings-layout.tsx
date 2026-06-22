@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SlidersHorizontal, Cable, CreditCard, User, Check, LogOut } from "lucide-react";
+import { SlidersHorizontal, Cable, CreditCard, User, Check, LogOut, Mail, Loader2, Gift } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { ConnectExtension } from "@/components/settings/connect-extension";
 import { ConnectTelegram } from "@/components/settings/connect-telegram";
+import { ProfileDetails, type CompDetails } from "@/components/settings/profile-details";
+import { EmailIntegrations, type EmailNotifications } from "@/components/settings/email-integrations";
+import { ReferralsPanel, type ReferralSummary } from "@/components/settings/referrals-panel";
+
+export type Pack = { id: string; credits: number; currency: "NGN" | "USD"; amount: number; label: string; popular?: boolean };
+export type SubPlan = { id: string; name: string; blurb: string; amount: number; applications: number; popular?: boolean };
+export type Entitlement = { planId: string | null; used: number; allowance: number; remaining: number };
+export type Tx = { id: string; delta: number; reason: string; balanceAfter: number; at: string };
 
 type Opt = "off" | "honest" | "aggressive";
 export type ApplySettings = {
@@ -19,7 +27,9 @@ export type ApplySettings = {
 const NAV = [
   { key: "apply", label: "Apply Settings", icon: SlidersHorizontal },
   { key: "integrations", label: "Integrations", icon: Cable },
+  { key: "email", label: "Email Integrations", icon: Mail },
   { key: "billing", label: "Plans & Billing", icon: CreditCard },
+  { key: "referrals", label: "Referrals", icon: Gift },
   { key: "account", label: "Account", icon: User },
 ] as const;
 
@@ -35,21 +45,55 @@ async function patchSettings(patch: Partial<ApplySettings>) {
 
 export function SettingsLayout({
   apply: initialApply,
+  comp,
   extensionConnected,
   telegramConnected,
   email,
   credits,
+  gmailHasScope,
+  gmailEnabled,
+  gmailEmail,
+  emailNotifications,
+  packs,
+  plans,
+  entitlement,
+  transactions,
+  txPage,
+  txTotalPages,
+  referral,
+  referralShareUrl,
+  defaultBilling,
+  paymentsEnabled,
+  initialSection,
 }: {
   apply: ApplySettings;
+  comp: CompDetails;
   extensionConnected: boolean;
   telegramConnected: boolean;
   email: string;
   credits: number;
+  gmailHasScope: boolean;
+  gmailEnabled: boolean;
+  gmailEmail: string | null;
+  emailNotifications: EmailNotifications;
+  packs: Pack[];
+  plans: SubPlan[];
+  entitlement: Entitlement | null;
+  transactions: Tx[];
+  txPage: number;
+  txTotalPages: number;
+  referral: ReferralSummary;
+  referralShareUrl: string;
+  defaultBilling: "credits" | "subscription";
+  paymentsEnabled: boolean;
+  initialSection?: string;
 }) {
-  const [section, setSection] = useState<NavKey>("apply");
+  const [section, setSection] = useState<NavKey>(
+    (NAV.some((n) => n.key === initialSection) ? (initialSection as NavKey) : "apply"),
+  );
 
   return (
-    <main className="max-w-[1100px] mx-auto px-6 lg:px-10 py-8">
+    <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-8">
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
         {/* Left sub-nav */}
         <aside className="rounded-xl border border-foreground/10 bg-background p-4 h-fit">
@@ -78,7 +122,7 @@ export function SettingsLayout({
 
         {/* Right panel */}
         <div className="min-w-0">
-          {section === "apply" && <ApplyPanel initial={initialApply} />}
+          {section === "apply" && <ApplyPanel initial={initialApply} comp={comp} />}
           {section === "integrations" && (
             <div className="flex flex-col gap-6">
               <ConnectExtension />
@@ -90,7 +134,13 @@ export function SettingsLayout({
               )}
             </div>
           )}
-          {section === "billing" && <BillingPanel credits={credits} />}
+          {section === "email" && (
+            <EmailIntegrations hasScope={gmailHasScope} enabled={gmailEnabled} email={gmailEmail} notifications={emailNotifications} />
+          )}
+          {section === "billing" && (
+            <BillingPanel credits={credits} packs={packs} plans={plans} entitlement={entitlement} transactions={transactions} txPage={txPage} txTotalPages={txTotalPages} defaultBilling={defaultBilling} paymentsEnabled={paymentsEnabled} />
+          )}
+          {section === "referrals" && <ReferralsPanel referral={referral} shareUrl={referralShareUrl} />}
           {section === "account" && <AccountPanel email={email} />}
         </div>
       </div>
@@ -123,7 +173,7 @@ const COVER_OPTS: { value: Opt; title: string; desc: string }[] = [
   { value: "aggressive", title: "Aggressive", desc: "Rewrite to closely match the job description" },
 ];
 
-function ApplyPanel({ initial }: { initial: ApplySettings }) {
+function ApplyPanel({ initial, comp }: { initial: ApplySettings; comp: CompDetails }) {
   const [s, setS] = useState<ApplySettings>(initial);
 
   const update = (patch: Partial<ApplySettings>) => {
@@ -173,6 +223,10 @@ function ApplyPanel({ initial }: { initial: ApplySettings }) {
           <Switch on={s.allowEmbellishment} onToggle={(v) => update({ allowEmbellishment: v })} />
         </div>
       </div>
+
+      <div className="h-6" />
+
+      <ProfileDetails initial={comp} />
     </div>
   );
 }
@@ -243,22 +297,191 @@ function Switch({ on, onToggle }: { on: boolean; onToggle: (v: boolean) => void 
   );
 }
 
-function BillingPanel({ credits }: { credits: number }) {
+const TX_LABEL: Record<string, string> = {
+  signup_bonus: "Signup bonus",
+  beta_bonus: "Beta bonus",
+  paystack_purchase: "Credit purchase",
+  tailoring_charge: "CV + cover tailoring",
+  application_charge: "Application submitted",
+  interview_booking: "Interview prep session",
+  interview_refund: "Interview refund",
+  refund: "Refund",
+  manual_adjustment: "Adjustment",
+};
+
+function BillingPanel({
+  credits,
+  packs,
+  plans,
+  entitlement,
+  transactions,
+  txPage,
+  txTotalPages,
+  defaultBilling,
+  paymentsEnabled,
+}: {
+  credits: number;
+  packs: Pack[];
+  plans: SubPlan[];
+  entitlement: Entitlement | null;
+  transactions: Tx[];
+  txPage: number;
+  txTotalPages: number;
+  defaultBilling: "credits" | "subscription";
+  paymentsEnabled: boolean;
+}) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"credits" | "subscription">(defaultBilling);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const go = async (url: string, body: Record<string, unknown>, id: string) => {
+    setError(null);
+    setBusy(id);
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setError(data.error || "Could not start checkout.");
+        setBusy(null);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("Network error. Please try again.");
+      setBusy(null);
+    }
+  };
+
+  const ngnPacks = packs.filter((p) => p.currency === "NGN");
+
   return (
     <div className="rounded-xl border border-foreground/10 bg-background p-6">
-      <PanelHeader icon={CreditCard} title="Plans & Billing" desc="Your application credits" />
-      <div className="rounded-lg border border-foreground/10 p-5 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">Applications left</p>
-          <p className="font-display text-3xl">{credits}</p>
-        </div>
-        <button disabled className="rounded-lg border border-foreground/15 px-4 py-2 text-sm text-muted-foreground cursor-not-allowed">
-          Buy a pack (soon)
+      <PanelHeader icon={CreditCard} title="Plans & Billing" desc="Pay for the applications, not the tool" />
+
+      {/* Region toggle */}
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => setMode("credits")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "credits" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
+          Nigeria (credits)
+        </button>
+        <button onClick={() => setMode("subscription")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "subscription" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
+          International (subscription)
         </button>
       </div>
-      <p className="text-xs text-muted-foreground mt-3">
-        One credit is used only when an application is actually submitted. Credit packs are coming soon.
-      </p>
+
+      {mode === "credits" ? (
+        <>
+          <div className="rounded-lg border border-foreground/10 p-5 flex items-center justify-between mb-6">
+            <div>
+              <p className="text-sm text-muted-foreground">Credits</p>
+              <p className="font-display text-3xl">{credits}</p>
+            </div>
+            <div className="text-right text-xs text-muted-foreground max-w-[260px]">
+              1 credit to tailor a CV + cover letter, 1 to submit, 24 for an interview prep session. Pay once; top up when you run out.
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {ngnPacks.map((p) => (
+              <div key={p.id} className={`relative rounded-xl border p-5 ${p.popular ? "border-foreground" : "border-foreground/10"}`}>
+                {p.popular && <span className="absolute -top-2 right-4 rounded-full bg-foreground text-background px-2 py-0.5 text-[10px] font-medium">Popular</span>}
+                <div className="font-display text-3xl">{p.credits}</div>
+                <div className="text-sm text-muted-foreground">credits · {p.label}</div>
+                <div className="text-xs text-muted-foreground mb-3">≈ {Math.floor(p.credits / 2)} applications</div>
+                <div className="text-lg font-medium mb-3">₦{(p.amount / 100).toLocaleString()}</div>
+                <button
+                  onClick={() => go("/api/billing/checkout", { packId: p.id }, p.id)}
+                  disabled={!paymentsEnabled || busy !== null}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-foreground text-background h-9 text-sm cursor-pointer hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {busy === p.id ? "Starting…" : "Buy"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {entitlement?.planId && (
+            <div className="rounded-lg border border-foreground/10 p-5 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm">
+                  Current plan: <span className="font-medium capitalize">{entitlement.planId}</span>
+                </p>
+                <p className="text-sm text-muted-foreground">{entitlement.used} / {entitlement.allowance} used</p>
+              </div>
+              <div className="h-2 rounded-full bg-foreground/10 overflow-hidden">
+                <div className="h-full bg-foreground" style={{ width: `${Math.min(100, (entitlement.used / Math.max(1, entitlement.allowance)) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground mb-4">Every tier is the full product. Tiers differ only by applications per 30-day cycle.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {plans.map((p) => (
+              <div key={p.id} className={`relative rounded-xl border p-5 ${p.popular ? "border-foreground" : "border-foreground/10"}`}>
+                {p.popular && <span className="absolute -top-2 right-4 rounded-full bg-foreground text-background px-2 py-0.5 text-[10px] font-medium">Most popular</span>}
+                <div className="font-medium">{p.name}</div>
+                <div className="font-display text-3xl mt-1">${(p.amount / 100).toLocaleString()}<span className="text-sm text-muted-foreground font-sans"> / mo</span></div>
+                <div className="text-sm text-muted-foreground mt-1 mb-3">{p.applications.toLocaleString()} applications / cycle</div>
+                <p className="text-xs text-muted-foreground mb-4 min-h-[32px]">{p.blurb}</p>
+                <button
+                  onClick={() => go("/api/billing/subscribe", { planId: p.id }, p.id)}
+                  disabled={!paymentsEnabled || busy !== null}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-foreground text-background h-9 text-sm cursor-pointer hover:bg-foreground/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {busy === p.id ? "Starting…" : entitlement?.planId === p.id ? "Current" : "Subscribe"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {error && <p className="text-sm text-rose-600 mt-3">{error}</p>}
+      {!paymentsEnabled && <p className="text-xs text-muted-foreground mt-3">Payments are not configured yet. Set PAYSTACK_SECRET_KEY to enable checkout.</p>}
+
+      {/* Transaction history */}
+      <div className="mt-8">
+        <p className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase mb-3">Recent transactions</p>
+        {transactions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No transactions yet.</p>
+        ) : (
+          <div className="rounded-lg border border-foreground/10 overflow-hidden">
+            {transactions.map((t, i) => (
+              <div key={t.id} className={`flex items-center gap-3 px-4 py-3 text-sm ${i > 0 ? "border-t border-foreground/5" : ""}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate">{TX_LABEL[t.reason] ?? t.reason}</div>
+                  <div className="text-xs text-muted-foreground">{new Date(t.at).toLocaleString()}</div>
+                </div>
+                <div className={`font-medium tabular-nums ${t.delta >= 0 ? "text-emerald-600" : "text-foreground"}`}>
+                  {t.delta >= 0 ? "+" : ""}{t.delta}
+                </div>
+                <div className="w-16 text-right text-muted-foreground tabular-nums">{t.balanceAfter}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {txTotalPages > 1 && (
+          <div className="flex items-center justify-between mt-3">
+            <button
+              onClick={() => router.push(`/dashboard/settings?tab=billing&txPage=${txPage - 1}`)}
+              disabled={txPage <= 1}
+              className="rounded-lg border border-foreground/15 px-3 h-8 text-sm cursor-pointer hover:border-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-xs text-muted-foreground">Page {txPage} of {txTotalPages}</span>
+            <button
+              onClick={() => router.push(`/dashboard/settings?tab=billing&txPage=${txPage + 1}`)}
+              disabled={txPage >= txTotalPages}
+              className="rounded-lg border border-foreground/15 px-3 h-8 text-sm cursor-pointer hover:border-foreground/40 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

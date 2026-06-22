@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/lib/db";
 import { users, sessions, accounts, verifications } from "@/lib/db/schema";
 import { sendEmail, buildWelcomeEmail } from "@/lib/email";
+import { ensureReferralCode } from "@/lib/referral";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -29,6 +30,8 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
+          // Generate the user's permanent referral code once, at signup.
+          await ensureReferralCode(user.id).catch((e) => console.error("[referral] code gen failed:", e));
           const { subject, text, html } = buildWelcomeEmail(user.name);
           await sendEmail({ to: user.email, subject, text, html });
         },
@@ -36,12 +39,23 @@ export const auth = betterAuth({
     },
   },
 
-  // Google OAuth only. Better Auth requests just openid/email/profile by default
-  // (NO gmail.readonly — FR-002 / Constitution IV). Gmail is a separate later step.
+  // Allow re-linking the same Google account so we can request extra scopes
+  // (gmail.readonly) on top of the login grant via authClient.linkSocial().
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
+  },
+
+  // Google OAuth only. Login requests just openid/email/profile; gmail.readonly is
+  // requested separately (and incrementally) from the Email Integrations settings.
+  // accessType "offline" so the extra-scope grant returns a refresh token.
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID as string,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+      accessType: "offline",
     },
   },
 });

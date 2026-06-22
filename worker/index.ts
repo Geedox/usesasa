@@ -1,11 +1,14 @@
 import "./env"; // MUST be first — loads .env.local before other imports read process.env
-import { getBoss, QUEUES, type ParseCvJob, type DiscoverCompanyJob, type DiscoverAggregatorJob, type ScoreUserJob, type TailorApplicationJob } from "../lib/queue";
+import { getBoss, QUEUES, type ParseCvJob, type DiscoverCompanyJob, type DiscoverAggregatorJob, type ScoreUserJob, type TailorApplicationJob, type SubmitApplicationJob, type InterviewReminderJob, type AutoGrabCodeJob } from "../lib/queue";
 import { parseCvForProfile } from "../lib/onboarding/parse";
 import { crawlCompany } from "../lib/discovery/crawl";
 import { crawlAggregator } from "../lib/discovery/crawl-aggregator";
 import { scoreUser } from "../lib/matching/score";
 import { tailorApplication } from "../lib/tailoring/tailor";
+import { processSteelSubmission } from "../lib/submit/steel";
+import { processAutoGrabCode } from "../lib/submit/autograb";
 import { runAutonomousCycle } from "../lib/discovery/cycle";
+import { processInterviewReminder } from "../lib/interview/reminders";
 import { startTelegramPolling } from "../lib/telegram";
 
 // Cron for the autonomous cycle. Default: every 8 hours. Override with DISCOVERY_CRON.
@@ -51,7 +54,32 @@ async function main() {
   await boss.work<TailorApplicationJob>(QUEUES.TAILOR_APPLICATION, async (jobs) => {
     for (const job of jobs) {
       console.log(`[worker] tailor_application ${job.data.applicationId}`);
-      await tailorApplication(job.data.applicationId);
+      await tailorApplication(job.data.applicationId, { embellishOverride: job.data.embellish });
+    }
+  });
+
+  // Cloud submission: fill + submit the application in a headless browser. One at
+  // a time (teamSize 1) — a headless Chromium is heavy and we must not race.
+  await boss.work<SubmitApplicationJob>(QUEUES.SUBMIT_APPLICATION, { batchSize: 1, localConcurrency: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[worker] submit_application ${job.data.applicationId}`);
+      await processSteelSubmission(job.data.applicationId);
+    }
+  });
+
+  // Interview-prep reminders: fire at 24h / 1h / 10min before each booked call.
+  await boss.work<InterviewReminderJob>(QUEUES.INTERVIEW_REMINDER, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[worker] interview_reminder ${job.data.kind} booking=${job.data.bookingId}`);
+      await processInterviewReminder(job.data.bookingId, job.data.kind);
+    }
+  });
+
+  // Auto-grab an emailed verification code from Gmail and resume a paused submit.
+  await boss.work<AutoGrabCodeJob>(QUEUES.AUTO_GRAB_CODE, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[worker] auto_grab_code attempt=${job.data.attempt} app=${job.data.applicationId}`);
+      await processAutoGrabCode(job.data.applicationId, job.data.attempt);
     }
   });
 
