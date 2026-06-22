@@ -46,7 +46,7 @@ function AnimatedCounter({ end, suffix = "", prefix = "" }: { end: number; suffi
 
 const metrics = [
   {
-    value: 128443,
+    value: 10000,
     suffix: "",
     prefix: "",
     label: "Applications submitted for users",

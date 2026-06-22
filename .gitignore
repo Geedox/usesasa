@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# dependencies (at any depth, e.g. extension/node_modules)
+node_modules/
 
 # next.js
 /.next/
@@ -26,7 +26,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# GitHub Spec Kit (local-only tooling — not pushed)
-/.specify/
-/CLAUDE.md
-.claude/skills/speckit-*/
+# chrome extension build (wxt)
+.output/
+.wxt/
+*.zip
+stats.html
+
+# tooling (local-only, not pushed)
+.specify/
+.claude/

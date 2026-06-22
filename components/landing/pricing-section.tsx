@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 
 const plans = [
@@ -9,12 +9,12 @@ const plans = [
     description: "Enough to test the waters",
     credits: 15,
     price: { ngn: "₦5,000", usd: "$3.50" },
+    perApp: { ngn: "₦333", usd: "$0.23" },
     features: [
       "15 applications",
-      "≈ ₦333 per application",
-      "AI-tailored CV + cover letter per role",
+      "AI tailored CV plus cover letter per role",
       "WhatsApp match alerts",
-      "Recruiter-reply tracking",
+      "Recruiter reply tracking",
     ],
     cta: "Get Starter",
     popular: false,
@@ -24,12 +24,12 @@ const plans = [
     description: "For a serious, steady search",
     credits: 50,
     price: { ngn: "₦15,000", usd: "$10" },
+    perApp: { ngn: "₦300", usd: "$0.20" },
     features: [
       "50 applications",
-      "≈ ₦300 per application",
       "Everything in Starter",
-      "Sponsorship filtering (UK / CA / EU / AU)",
-      "Daily digest + Kanban tracker",
+      "Sponsorship filtering (UK, CA, EU, AU)",
+      "Daily digest plus Kanban tracker",
     ],
     cta: "Get Growth",
     popular: true,
@@ -39,11 +39,11 @@ const plans = [
     description: "Go wide, hit every match",
     credits: 150,
     price: { ngn: "₦35,000", usd: "$23" },
+    perApp: { ngn: "₦233", usd: "$0.15" },
     features: [
       "150 applications",
-      "≈ ₦233 per application",
       "Everything in Growth",
-      "Premium tailoring + follow-up emails",
+      "Premium tailoring plus follow up emails",
       "Priority support",
     ],
     cta: "Get Hunter",
@@ -52,7 +52,27 @@ const plans = [
 ];
 
 export function PricingSection() {
+  // Geofence the currency: Nigeria sees Naira, everyone else sees USD. Default to
+  // Naira (our primary market) until we confirm the visitor is outside Nigeria.
   const [isUSD, setIsUSD] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/geo");
+        const data = (await res.json()) as { country?: string | null };
+        if (alive && data?.country) setIsUSD(data.country !== "NG");
+      } catch {
+        /* keep the Naira default if detection fails */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const cur = (p: { ngn: string; usd: string }) => (isUSD ? p.usd : p.ngn);
 
   return (
     <section
@@ -71,39 +91,18 @@ export function PricingSection() {
             <span className="text-stroke">Not the tool.</span>
           </h2>
           <p className="text-lg text-muted-foreground max-w-xl">
-            Buy credits, not a subscription. 1 credit = 1 application submitted,
-            and you're only charged when it actually goes out. Start with 5
+            Buy credits, not a subscription. 1 credit is 1 application submitted,
+            and you are only charged when it actually goes out. Start with 5
             free.
           </p>
         </div>
 
-        {/* Billing Toggle */}
-        <div className="flex items-center gap-4 mb-16">
-          <span
-            className={`text-sm transition-colors ${
-              !isUSD ? "text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            Naira (₦)
+        {/* Currency note (auto detected by location) */}
+        <div className="flex items-center gap-3 mb-16">
+          <span className="text-sm text-muted-foreground">
+            Prices shown in {isUSD ? "US Dollars ($)" : "Naira (₦)"} based on your location
           </span>
-          <button
-            onClick={() => setIsUSD(!isUSD)}
-            className="relative w-14 h-7 bg-foreground/10 rounded-full p-1 transition-colors hover:bg-foreground/20"
-          >
-            <div
-              className={`w-5 h-5 bg-foreground rounded-full transition-transform duration-300 ${
-                isUSD ? "translate-x-7" : "translate-x-0"
-              }`}
-            />
-          </button>
-          <span
-            className={`text-sm transition-colors ${
-              isUSD ? "text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            USD ($)
-          </span>
-          <span className="ml-2 px-2 py-1 bg-foreground text-primary-foreground text-xs font-mono">
+          <span className="px-2 py-1 bg-foreground text-primary-foreground text-xs font-mono">
             Paystack
           </span>
         </div>
@@ -142,12 +141,15 @@ export function PricingSection() {
               <div className="mb-8 pb-8 border-b border-foreground/10">
                 <div className="flex items-baseline gap-2">
                   <span className="font-display text-5xl lg:text-6xl text-foreground">
-                    {isUSD ? plan.price.usd : plan.price.ngn}
+                    {cur(plan.price)}
                   </span>
                   <span className="text-muted-foreground">
                     / {plan.credits} credits
                   </span>
                 </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  About {cur(plan.perApp)} per application
+                </p>
               </div>
 
               {/* Features */}
@@ -180,10 +182,11 @@ export function PricingSection() {
         {/* Bottom Note */}
         <p className="mt-12 text-center text-sm text-muted-foreground">
           New here? Start with{" "}
-          <span className="text-foreground">5 free applications</span> — no card
+          <span className="text-foreground">5 free applications</span>, no card
           required. Applying at scale? The{" "}
-          <span className="text-foreground">Power</span> pack is ₦100,000 for
-          500 credits (₦200 each).{" "}
+          <span className="text-foreground">Power</span> pack is{" "}
+          {isUSD ? "$65" : "₦100,000"} for 500 credits (
+          {isUSD ? "$0.13" : "₦200"} each).{" "}
           <a
             href="#"
             className="underline underline-offset-4 hover:text-foreground transition-colors"
