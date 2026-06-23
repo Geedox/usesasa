@@ -20,7 +20,7 @@ const footerLinks = {
     { name: "About", href: "#" },
     { name: "Blog", href: "#" },
     { name: "Contact", href: "mailto:founders@usesasa.xyz" },
-    { name: "AI disclosure", href: "#" },
+    { name: "AI disclosure", href: "/terms#ai-generated-content" },
   ],
   Legal: [
     { name: "Privacy", href: "/privacy" },
@@ -101,9 +101,13 @@ export function FooterSection() {
 
         {/* Bottom Bar */}
         <div className="py-8 border-t border-foreground/10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            © 2026 Sasa. All rights reserved.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <span>© 2026 Sasa. All rights reserved.</span>
+            <span className="text-foreground/20">·</span>
+            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy</a>
+            <span className="text-foreground/20">·</span>
+            <a href="/terms" className="hover:text-foreground transition-colors">Terms</a>
+          </div>
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
