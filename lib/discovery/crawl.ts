@@ -15,6 +15,7 @@ import { fetchBambooHrJobs } from "@/lib/ats/bamboohr";
 import { fetchBreezyJobs } from "@/lib/ats/breezy";
 import { fetchPersonioJobs } from "@/lib/ats/personio";
 import { fetchGemJobs } from "@/lib/ats/gem";
+import { fetchZohoJobs } from "@/lib/ats/zoho";
 import { fetchCustomJobs } from "@/lib/ats/custom";
 
 const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>> = {
@@ -30,8 +31,13 @@ const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>>
   breezy: fetchBreezyJobs,
   personio: fetchPersonioJobs,
   gem: fetchGemJobs,
+  zoho: fetchZohoJobs, // slug = career-site host; rendered via Steel (costs a session)
   custom: fetchCustomJobs, // slug = the careers-page URL
 };
+
+// ATS that cost money to crawl (headless render via Steel), so callers can choose to
+// crawl them less aggressively / only when user-added. Cheap JSON-API ATS aren't here.
+export const COSTLY_ATS: ReadonlySet<Ats> = new Set<Ats>(["zoho"]);
 
 // Fetch a company's postings from its ATS and upsert into `jobs` (idempotent on
 // source + external_id). Returns how many postings were found.

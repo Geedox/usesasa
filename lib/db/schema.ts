@@ -29,6 +29,7 @@ export type Ats =
   | "breezy"
   | "personio"
   | "gem"
+  | "zoho"
   | "custom"
   | "wellfound"
   | "yc"
