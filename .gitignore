@@ -35,3 +35,6 @@ stats.html
 # tooling (local-only, not pushed)
 .specify/
 .claude/
+
+# macOS
+.DS_Store
