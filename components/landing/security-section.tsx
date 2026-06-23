@@ -18,9 +18,9 @@ const securityFeatures = [
   },
   {
     icon: Lock,
-    title: "Read-only on your inbox",
+    title: "Read only on your inbox",
     description:
-      "Gmail access is read-only, used only to route recruiter replies. We store emails that match an application, nothing else.",
+      "If you connect Gmail, access is read only and used only to detect the verification codes job sites email during an application and to match recruiter replies to the right application. We never read or store the rest of your inbox.",
   },
   {
     icon: Shield,
@@ -33,7 +33,7 @@ const securityFeatures = [
 const certifications = [
   "NDPR compliant",
   "GDPR",
-  "Gmail read-only",
+  "Gmail read only",
   "Delete anytime",
   "Open extension",
 ];
