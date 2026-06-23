@@ -23,9 +23,9 @@ const footerLinks = {
     { name: "AI disclosure", href: "#" },
   ],
   Legal: [
-    { name: "Privacy", href: "#" },
-    { name: "Terms", href: "#" },
-    { name: "Delete account", href: "#" },
+    { name: "Privacy", href: "/privacy" },
+    { name: "Terms", href: "/terms" },
+    { name: "Delete account", href: "/dashboard/settings" },
   ],
 };
 
