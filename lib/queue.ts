@@ -11,13 +11,14 @@ export const QUEUES = {
   TAILOR_APPLICATION: "tailor_application",
   SUBMIT_APPLICATION: "submit_application", // cloud submit: fill + submit in a headless browser
   DISCOVER_TICK: "discover_tick", // cron-driven: crawl boards + score every onboarded user
+  DISCOVER_YC: "discover_yc", // cron-driven (daily): probe the YC directory + enroll new ATS boards
   INTERVIEW_REMINDER: "interview_reminder", // delayed: nudge before an interview-prep call
   AUTO_GRAB_CODE: "auto_grab_code", // delayed: pull an emailed OTP from Gmail and resume a paused submit
 } as const;
 
 export type ParseCvJob = { profileId: string; cvPublicId: string };
 export type DiscoverCompanyJob = { companyId: string; slug: string; ats: Ats };
-export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" };
+export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas" };
 export type ScoreUserJob = { userId: string };
 export type TailorApplicationJob = { applicationId: string; embellish?: boolean };
 export type SubmitApplicationJob = { applicationId: string };
@@ -43,6 +44,7 @@ async function createBoss(): Promise<PgBoss> {
   await boss.createQueue(QUEUES.TAILOR_APPLICATION);
   await boss.createQueue(QUEUES.SUBMIT_APPLICATION);
   await boss.createQueue(QUEUES.DISCOVER_TICK);
+  await boss.createQueue(QUEUES.DISCOVER_YC);
   await boss.createQueue(QUEUES.INTERVIEW_REMINDER);
   await boss.createQueue(QUEUES.AUTO_GRAB_CODE);
   return boss;

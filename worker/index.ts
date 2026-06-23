@@ -8,11 +8,14 @@ import { tailorApplication } from "../lib/tailoring/tailor";
 import { processSteelSubmission } from "../lib/submit/steel";
 import { processAutoGrabCode } from "../lib/submit/autograb";
 import { runAutonomousCycle } from "../lib/discovery/cycle";
+import { discoverYcBoards } from "../lib/discovery/yc-discovery";
 import { processInterviewReminder } from "../lib/interview/reminders";
 import { startTelegramPolling } from "../lib/telegram";
 
 // Cron for the autonomous cycle. Default: every 8 hours. Override with DISCOVERY_CRON.
 const DISCOVERY_CRON = process.env.DISCOVERY_CRON || "0 */8 * * *";
+// YC board discovery runs daily (probing the whole directory is heavy). Override with YC_DISCOVERY_CRON.
+const YC_DISCOVERY_CRON = process.env.YC_DISCOVERY_CRON || "0 4 * * *";
 
 // Background worker. Runs as its own process/service (Railway worker service in prod).
 // Add more `boss.work(...)` handlers here as we add jobs (crawler, match, email poll).
@@ -90,9 +93,18 @@ async function main() {
     console.log(`[worker] tick: queued ${companies} boards, scoring ${users} users, renudged ${renudged} stuck, purged ${purged} stale matches`);
   });
 
-  // Register the recurring schedule (pg-boss upserts by name, so this is idempotent).
+  // Auto-discovery: probe the YC directory for live ATS boards and enroll them, so we
+  // cover companies nobody seeded. Daily (probing thousands every 8h would rate-limit).
+  await boss.work(QUEUES.DISCOVER_YC, async () => {
+    console.log("[worker] discover_yc — probing YC directory for ATS boards");
+    const { scanned, hits, enrolled } = await discoverYcBoards();
+    console.log(`[worker] yc discovery: scanned ${scanned}, ${hits} live boards, ${enrolled} newly enrolled`);
+  });
+
+  // Register the recurring schedules (pg-boss upserts by name, so these are idempotent).
   await boss.schedule(QUEUES.DISCOVER_TICK, DISCOVERY_CRON);
-  console.log(`[worker] autonomous cycle scheduled: "${DISCOVERY_CRON}"`);
+  await boss.schedule(QUEUES.DISCOVER_YC, YC_DISCOVERY_CRON);
+  console.log(`[worker] schedules — cycle: "${DISCOVERY_CRON}", yc discovery: "${YC_DISCOVERY_CRON}"`);
 
   // Telegram review nudges: long-poll for /start links and Approve/Skip taps.
   void startTelegramPolling();

@@ -4,7 +4,7 @@
 // boards on ATSes we already submit to — no HTML scraping, no new fetchers.
 import { readFileSync } from "node:fs";
 
-type Co = { name?: string; slug?: string; website?: string; status?: string; small_logo_thumb_url?: string };
+export type Co = { name?: string; slug?: string; website?: string; status?: string; small_logo_thumb_url?: string; isHiring?: boolean };
 export type Hit = { ats: "ashby" | "greenhouse" | "lever" | "workable"; slug: string; name: string; jobs: number; logoUrl?: string };
 
 const TIMEOUT = 10000;
@@ -77,10 +77,9 @@ async function probeCompany(co: Co): Promise<Hit | null> {
   return null;
 }
 
-export async function probeYc(jsonPath: string, opts: { limit?: number; concurrency?: number; activeOnly?: boolean } = {}): Promise<Hit[]> {
-  const all = JSON.parse(readFileSync(jsonPath, "utf-8")) as Co[];
-  let cos = all.filter((c) => c.website);
-  if (opts.activeOnly) cos = cos.filter((c) => c.status === "Active");
+// Probe a list of companies (already fetched/filtered) for live ATS boards. Shared by
+// the CLI file path (probeYc) and the scheduled discovery (which fetches the directory).
+export async function probeYcCompanies(cos: Co[], opts: { limit?: number; concurrency?: number } = {}): Promise<Hit[]> {
   if (opts.limit) cos = cos.slice(0, opts.limit);
 
   const hits: Hit[] = [];
@@ -99,4 +98,12 @@ export async function probeYc(jsonPath: string, opts: { limit?: number; concurre
   }
   await Promise.all(Array.from({ length: conc }, worker));
   return hits;
+}
+
+// CLI/manual entry: read the YC directory from a local JSON file, then probe.
+export async function probeYc(jsonPath: string, opts: { limit?: number; concurrency?: number; activeOnly?: boolean } = {}): Promise<Hit[]> {
+  const all = JSON.parse(readFileSync(jsonPath, "utf-8")) as Co[];
+  let cos = all.filter((c) => c.website);
+  if (opts.activeOnly) cos = cos.filter((c) => c.status === "Active");
+  return probeYcCompanies(cos, opts);
 }

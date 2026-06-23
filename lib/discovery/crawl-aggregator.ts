@@ -6,8 +6,9 @@ import { fetchWeWorkRemotelyJobs } from "@/lib/ats/weworkremotely";
 import { fetchMyJobMagJobs } from "@/lib/ats/myjobmag";
 import { fetchJobbermanJobs } from "@/lib/ats/jobberman";
 import { fetchTheHubJobs } from "@/lib/ats/thehub";
+import { fetchHimalayasJobs } from "@/lib/ats/himalayas";
 
-export type AggregatorSource = "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub";
+export type AggregatorSource = "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas";
 
 const FETCHERS: Record<AggregatorSource, () => Promise<AggregatorJob[]>> = {
   remoteok: fetchRemoteOkJobs,
@@ -15,6 +16,7 @@ const FETCHERS: Record<AggregatorSource, () => Promise<AggregatorJob[]>> = {
   myjobmag: fetchMyJobMagJobs,
   jobberman: fetchJobbermanJobs,
   thehub: fetchTheHubJobs,
+  himalayas: fetchHimalayasJobs,
 };
 
 function slugify(name: string): string {

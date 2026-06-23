@@ -18,6 +18,7 @@ export async function enqueueCrawlAll(): Promise<number> {
   await enqueueDiscoverAggregator({ source: "myjobmag" });
   await enqueueDiscoverAggregator({ source: "jobberman" });
   await enqueueDiscoverAggregator({ source: "thehub" });
+  await enqueueDiscoverAggregator({ source: "himalayas" });
   return all.length;
 }
 

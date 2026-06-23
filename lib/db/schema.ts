@@ -37,7 +37,8 @@ export type Ats =
   | "weworkremotely"
   | "myjobmag"
   | "jobberman"
-  | "thehub";
+  | "thehub"
+  | "himalayas";
 export type SponsorshipSignal = "sponsors" | "does_not_sponsor" | "unknown";
 export type MatchAction = "pending" | "queued" | "skipped" | "snoozed";
 export type ApplicationState =
