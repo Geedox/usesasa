@@ -3,6 +3,11 @@ import Link from "next/link";
 export type LegalBlock = { p?: string; sub?: string; list?: string[] };
 export type LegalSection = { title: string; blocks: LegalBlock[] };
 
+// Anchor id from a section title: drop the leading "N." and slugify.
+// "5. AI Generated Content" -> "ai-generated-content"
+const slug = (title: string) =>
+  title.toLowerCase().replace(/^\d+\.\s*/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 // Shared layout for the Privacy Policy and Terms pages. Content lives in plain JS
 // strings (passed as data) so quotes/apostrophes don't trip JSX entity linting.
 export function LegalPage({
@@ -31,7 +36,7 @@ export function LegalPage({
         ))}
 
         {sections.map((s, i) => (
-          <section key={`s-${i}`} className="mt-10">
+          <section key={`s-${i}`} id={slug(s.title)} className="mt-10 scroll-mt-24">
             <h2 className="font-display text-xl lg:text-2xl tracking-tight mb-3">{s.title}</h2>
             {s.blocks.map((b, j) => {
               if (b.sub) return <h3 key={j} className="font-medium text-foreground mt-5 mb-1.5">{b.sub}</h3>;
