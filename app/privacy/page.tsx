@@ -31,12 +31,12 @@ const sections: LegalSection[] = [
       },
       { sub: "Email integration data" },
       {
-        p: "If you connect your Gmail account, you grant read only access. We process a limited set of recent messages for the sole purpose of detecting and autofilling the one time passwords (OTPs) and verification links that job sites send during an application.",
+        p: "If you connect your Gmail account, you grant read only access. We process a limited set of recent messages for two purposes only: to detect and autofill the one time passwords (OTPs) and verification links that job sites send during an application, and to match recruiter replies to the right application so your tracker stays current.",
       },
       {
         list: [
-          "We do not permanently store or analyze the full contents of your mailbox.",
-          "Access is limited to what is needed to find these codes and links, and is processed securely.",
+          "We do not read, permanently store, or analyze the full contents of your mailbox.",
+          "Access is limited to the messages needed for those two purposes, and is processed securely.",
           "You can revoke this access at any time from your settings.",
         ],
       },
@@ -58,7 +58,7 @@ const sections: LegalSection[] = [
           "Tailor your CV and cover letter to a job description, on request.",
           "Draft answers to application questions, on request.",
           "Find roles that fit your profile and submit applications you approve.",
-          "Detect and autofill OTPs and verification links when you connect Gmail.",
+          "Detect and autofill OTPs and verification links, and match recruiter replies to the right application, when you connect Gmail.",
           "Run interview prep: when you book a session, we share the context the assigned mentor needs to run and score it.",
           "Send you updates, feature news, and support messages.",
           "Monitor usage and keep the Services secure.",
