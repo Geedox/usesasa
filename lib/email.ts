@@ -35,6 +35,32 @@ export async function sendEmail({
 }
 
 // Plain welcome email (no colors or branding, just a normal note).
+// One time code email for email verification and password reset.
+export function buildOtpEmail(otp: string, type: "email-verification" | "forget-password" | "sign-in" | "change-email") {
+  const reset = type === "forget-password";
+  const subject = reset ? "Reset your Sasa password" : "Your Sasa verification code";
+  const intro = reset
+    ? "Use this code to reset your Sasa password."
+    : "Use this code to verify your email and finish setting up Sasa.";
+
+  const text = `${intro}
+
+Your code is: ${otp}
+
+It expires in 10 minutes. If you did not request this, you can ignore this email.
+
+The Sasa team`;
+
+  const html = `<div style="font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.6; max-width: 560px;">
+  <p>${intro}</p>
+  <p style="font-size: 30px; font-weight: 700; letter-spacing: 6px; margin: 16px 0;">${otp}</p>
+  <p style="color: #666;">It expires in 10 minutes. If you did not request this, you can ignore this email.</p>
+  <p>The Sasa team</p>
+</div>`;
+
+  return { subject, text, html };
+}
+
 export function buildWelcomeEmail(name?: string | null) {
   const first = name?.trim().split(" ")[0] || "there";
   const dashboard = `${SITE_URL}/dashboard`;

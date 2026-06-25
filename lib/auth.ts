@@ -1,13 +1,34 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { emailOTP } from "better-auth/plugins";
 import { db } from "@/lib/db";
 import { users, sessions, accounts, verifications } from "@/lib/db/schema";
-import { sendEmail, buildWelcomeEmail } from "@/lib/email";
+import { sendEmail, buildWelcomeEmail, buildOtpEmail } from "@/lib/email";
 import { ensureReferralCode } from "@/lib/referral";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+
+  // Email + password sign-in. Email must be verified (via a one time code, below)
+  // before a password login works. Password reset is also code based (no links).
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+    minPasswordLength: 8,
+  },
+
+  // One time codes for email verification, password reset, and OTP sign-in.
+  plugins: [
+    emailOTP({
+      otpLength: 6,
+      expiresIn: 600, // 10 minutes
+      async sendVerificationOTP({ email, otp, type }) {
+        const { subject, text, html } = buildOtpEmail(otp, type);
+        await sendEmail({ to: email, subject, text, html });
+      },
+    }),
+  ],
 
   // Use our existing Drizzle/Postgres schema. Map Better Auth's models to our tables.
   database: drizzleAdapter(db, {
