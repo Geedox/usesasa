@@ -2,12 +2,16 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
-import { creditLedger, mentors } from "@/lib/db/schema";
+import { creditLedger, mentors, users } from "@/lib/db/schema";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  // Must finish onboarding before using the dashboard; resume the wizard otherwise.
+  const me = await db.query.users.findFirst({ where: eq(users.id, session.user.id), columns: { onboardedAt: true } });
+  if (!me?.onboardedAt) redirect("/onboarding");
 
   // Credit balance from the ledger (placeholder: defaults to the 5 free-trial credits).
   const rows = await db
