@@ -53,8 +53,13 @@ export const auth = betterAuth({
         after: async (user) => {
           // Generate the user's permanent referral code once, at signup.
           await ensureReferralCode(user.id).catch((e) => console.error("[referral] code gen failed:", e));
-          const { subject, text, html } = buildWelcomeEmail(user.name);
-          await sendEmail({ to: user.email, subject, text, html });
+          // Welcome email is best-effort: never let it affect sign-up.
+          try {
+            const { subject, text, html } = buildWelcomeEmail(user.name);
+            await sendEmail({ to: user.email, subject, text, html });
+          } catch (e) {
+            console.error("[welcome-email] send failed:", e);
+          }
         },
       },
     },

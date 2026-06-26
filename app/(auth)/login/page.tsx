@@ -85,7 +85,18 @@ export default function LoginPage() {
       } else if (mode === "verify") {
         const { error: err } = await authClient.emailOtp.verifyEmail({ email, otp });
         if (err) return setError(errMsg(err, "Invalid or expired code."));
-        go("/onboarding");
+        // Email is verified now. Sign in with the password just set so the user lands
+        // in onboarding instead of bouncing back to an empty login form.
+        if (password) {
+          const { error: signErr } = await authClient.signIn.email({ email, password });
+          if (signErr) {
+            setInfo("Email verified. Please sign in.");
+            return setMode("signin");
+          }
+          return go("/onboarding");
+        }
+        setInfo("Email verified. Please sign in.");
+        setMode("signin");
       } else if (mode === "forgot") {
         const { error: err } = await authClient.forgetPassword.emailOtp({ email });
         if (err) return setError(errMsg(err, "Could not send the code."));
