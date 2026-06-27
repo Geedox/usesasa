@@ -13,6 +13,7 @@ import {
   jsonb,
   time,
   unique,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ---- shared string-union types (kept as text columns for easy evolution) ----
@@ -38,7 +39,10 @@ export type Ats =
   | "myjobmag"
   | "jobberman"
   | "thehub"
-  | "himalayas";
+  | "himalayas"
+  | "remotive"
+  | "arbeitnow"
+  | "themuse";
 export type SponsorshipSignal = "sponsors" | "does_not_sponsor" | "unknown";
 export type MatchAction = "pending" | "queued" | "skipped" | "snoozed";
 export type ApplicationState =
@@ -210,9 +214,15 @@ export const jobs = pgTable("jobs", {
   postedAt: timestamp("posted_at", { withTimezone: true }),
   rawJd: text("raw_jd"),
   parsedJd: jsonb("parsed_jd"),
+  // Normalized "company|title" key for cross-source dedup (same role on RemoteOK +
+  // Remotive + a company board). Set on insert; aggregators skip a key already seen.
+  dedupeKey: text("dedupe_key"),
   isActive: boolean("is_active").notNull().default(true),
   discoveredAt: timestamp("discovered_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [unique("jobs_source_external_id_unique").on(t.source, t.externalId)]);
+}, (t) => [
+  unique("jobs_source_external_id_unique").on(t.source, t.externalId),
+  index("jobs_dedupe_key_idx").on(t.dedupeKey),
+]);
 
 // ---- job-user matches ----
 export const matches = pgTable("matches", {

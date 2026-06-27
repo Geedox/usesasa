@@ -1,14 +1,20 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companies, jobs } from "@/lib/db/schema";
+import { makeDedupeKey } from "@/lib/ats/util";
 import { fetchRemoteOkJobs, type AggregatorJob } from "@/lib/ats/remoteok";
 import { fetchWeWorkRemotelyJobs } from "@/lib/ats/weworkremotely";
 import { fetchMyJobMagJobs } from "@/lib/ats/myjobmag";
 import { fetchJobbermanJobs } from "@/lib/ats/jobberman";
 import { fetchTheHubJobs } from "@/lib/ats/thehub";
 import { fetchHimalayasJobs } from "@/lib/ats/himalayas";
+import { fetchRemotiveJobs } from "@/lib/ats/remotive";
+import { fetchArbeitnowJobs } from "@/lib/ats/arbeitnow";
+import { fetchTheMuseJobs } from "@/lib/ats/themuse";
 
-export type AggregatorSource = "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas";
+export type AggregatorSource =
+  | "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas"
+  | "remotive" | "arbeitnow" | "themuse";
 
 const FETCHERS: Record<AggregatorSource, () => Promise<AggregatorJob[]>> = {
   remoteok: fetchRemoteOkJobs,
@@ -17,6 +23,9 @@ const FETCHERS: Record<AggregatorSource, () => Promise<AggregatorJob[]>> = {
   jobberman: fetchJobbermanJobs,
   thehub: fetchTheHubJobs,
   himalayas: fetchHimalayasJobs,
+  remotive: fetchRemotiveJobs,
+  arbeitnow: fetchArbeitnowJobs,
+  themuse: fetchTheMuseJobs,
 };
 
 function slugify(name: string): string {
@@ -64,13 +73,34 @@ export async function crawlAggregator(source: AggregatorSource): Promise<number>
         remotePolicy: it.remotePolicy,
         postedAt: it.postedAt,
         rawJd: it.rawJd,
+        dedupeKey: makeDedupeKey(it.company, it.title),
         isActive: true,
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
-  if (jobRows.length > 0) {
-    await db.insert(jobs).values(jobRows).onConflictDoNothing({ target: [jobs.source, jobs.externalId] });
+  // Light cross-source dedup: drop postings whose normalized company|title already
+  // exists as an active job (another aggregator, or a company board), and collapse
+  // duplicates within this batch. Keeps the feed from showing the same role 3 times.
+  const keys = [...new Set(jobRows.map((r) => r.dedupeKey).filter(Boolean))];
+  const existing = new Set<string>();
+  if (keys.length > 0) {
+    const rows = await db
+      .select({ k: jobs.dedupeKey })
+      .from(jobs)
+      .where(and(eq(jobs.isActive, true), inArray(jobs.dedupeKey, keys)));
+    for (const r of rows) if (r.k) existing.add(r.k);
   }
-  return items.length;
+  const batchSeen = new Set<string>();
+  const deduped = jobRows.filter((r) => {
+    if (!r.dedupeKey) return true;
+    if (existing.has(r.dedupeKey) || batchSeen.has(r.dedupeKey)) return false;
+    batchSeen.add(r.dedupeKey);
+    return true;
+  });
+
+  if (deduped.length > 0) {
+    await db.insert(jobs).values(deduped).onConflictDoNothing({ target: [jobs.source, jobs.externalId] });
+  }
+  return deduped.length;
 }

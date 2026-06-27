@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { companies, jobs } from "@/lib/db/schema";
 import type { Ats } from "@/lib/db/schema";
-import type { NormalizedJob } from "@/lib/ats/util";
+import { type NormalizedJob, makeDedupeKey } from "@/lib/ats/util";
 import { fetchGreenhouseJobs } from "@/lib/ats/greenhouse";
 import { fetchLeverJobs } from "@/lib/ats/lever";
 import { fetchAshbyJobs } from "@/lib/ats/ashby";
@@ -44,6 +44,10 @@ export async function crawlCompany(companyId: string, slug: string, ats: Ats): P
   const found = await fetcher(slug);
 
   if (found.length > 0) {
+    // Company name for the dedup key (lets aggregators skip a role we already have
+    // directly from this company's board).
+    const company = await db.query.companies.findFirst({ where: eq(companies.id, companyId), columns: { name: true } });
+    const companyName = company?.name ?? "";
     await db
       .insert(jobs)
       .values(
@@ -57,6 +61,7 @@ export async function crawlCompany(companyId: string, slug: string, ats: Ats): P
           remotePolicy: j.remotePolicy,
           postedAt: j.postedAt,
           rawJd: j.rawJd,
+          dedupeKey: makeDedupeKey(companyName, j.title),
           isActive: true,
         })),
       )

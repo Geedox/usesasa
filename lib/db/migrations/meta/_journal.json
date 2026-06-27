@@ -50,6 +50,13 @@
       "when": 1782325305942,
       "tag": "0006_outgoing_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782539101796,
+      "tag": "0007_plain_hitman",
+      "breakpoints": true
     }
   ]
 }
