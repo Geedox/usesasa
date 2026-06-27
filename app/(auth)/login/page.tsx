@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,13 +185,19 @@ export default function LoginPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm text-emerald-600">{info}</p>}
 
-          <Button type="submit" disabled={loading} className="w-full h-12 rounded-full bg-foreground text-background hover:bg-foreground/90 cursor-pointer">
-            {loading ? "Please wait…" :
+          <Button type="submit" disabled={loading} className="w-full h-12 rounded-full bg-foreground text-background hover:bg-foreground/90 cursor-pointer disabled:opacity-100">
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Please wait…
+              </span>
+            ) : (
               mode === "signin" ? "Sign in" :
               mode === "signup" ? "Create account" :
               mode === "verify" ? "Verify and continue" :
               mode === "forgot" ? "Send reset code" :
-              "Update password"}
+              "Update password"
+            )}
           </Button>
         </form>
 
