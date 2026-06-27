@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -61,8 +62,9 @@ export default function LoginPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clear();
-    setLoading(true);
+    // Paint the loading state synchronously so the spinner is always visible, even
+    // when the action resolves and navigates away quickly (e.g. verify -> onboarding).
+    flushSync(() => { setError(""); setInfo(""); setLoading(true); });
     try {
       if (mode === "signup") {
         const { error: err } = await authClient.signUp.email({ name, email, password });
