@@ -6,7 +6,7 @@
 
 export type DetectedAts =
   | "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "workable"
-  | "recruitee" | "teamtailor" | "bamboohr" | "breezy" | "personio" | "gem" | "zoho";
+  | "recruitee" | "teamtailor" | "bamboohr" | "breezy" | "personio" | "gem" | "zoho" | "pinpoint";
 
 export type Detection = {
   url: string;
@@ -50,6 +50,7 @@ function matchSignatures(text: string): { ats: DetectedAts; slug?: string } | nu
     sub(/([a-z0-9-]+)\.teamtailor\.com/i, "teamtailor") ||
     sub(/([a-z0-9-]+)\.bamboohr\.com/i, "bamboohr") ||
     sub(/([a-z0-9-]+)\.breezy\.hr/i, "breezy") ||
+    sub(/([a-z0-9-]+)\.pinpointhq\.com/i, "pinpoint") ||
     path(/([a-z0-9-]+)\.jobs\.personio\.com/i, "personio") ||
     path(/jobs\.gem\.com\/([a-z0-9_-]+)/i, "gem") ||
     (() => {

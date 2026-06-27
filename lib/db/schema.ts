@@ -31,6 +31,7 @@ export type Ats =
   | "personio"
   | "gem"
   | "zoho"
+  | "pinpoint"
   | "custom"
   | "wellfound"
   | "yc"

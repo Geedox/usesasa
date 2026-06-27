@@ -16,6 +16,7 @@ import { fetchBreezyJobs } from "@/lib/ats/breezy";
 import { fetchPersonioJobs } from "@/lib/ats/personio";
 import { fetchGemJobs } from "@/lib/ats/gem";
 import { fetchZohoJobs } from "@/lib/ats/zoho";
+import { fetchPinpointJobs } from "@/lib/ats/pinpoint";
 import { fetchCustomJobs } from "@/lib/ats/custom";
 
 const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>> = {
@@ -32,6 +33,7 @@ const FETCHERS: Partial<Record<Ats, (slug: string) => Promise<NormalizedJob[]>>>
   personio: fetchPersonioJobs,
   gem: fetchGemJobs,
   zoho: fetchZohoJobs, // slug = career-site host; reads jobs embedded in the page HTML
+  pinpoint: fetchPinpointJobs, // slug = account subdomain; clean postings.json
   custom: fetchCustomJobs, // slug = the careers-page URL
 };
 
