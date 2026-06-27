@@ -18,7 +18,7 @@ export const QUEUES = {
 
 export type ParseCvJob = { profileId: string; cvPublicId: string };
 export type DiscoverCompanyJob = { companyId: string; slug: string; ats: Ats };
-export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas" | "remotive" | "arbeitnow" | "themuse" };
+export type DiscoverAggregatorJob = { source: "remoteok" | "weworkremotely" | "myjobmag" | "jobberman" | "thehub" | "himalayas" | "remotive" | "arbeitnow" | "themuse" | "brightermonday" | "fuzu" | "ngcareers" };
 export type ScoreUserJob = { userId: string };
 export type TailorApplicationJob = { applicationId: string; embellish?: boolean };
 export type SubmitApplicationJob = { applicationId: string };

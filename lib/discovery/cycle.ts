@@ -22,6 +22,9 @@ export async function enqueueCrawlAll(): Promise<number> {
   await enqueueDiscoverAggregator({ source: "remotive" });
   await enqueueDiscoverAggregator({ source: "arbeitnow" });
   await enqueueDiscoverAggregator({ source: "themuse" });
+  await enqueueDiscoverAggregator({ source: "brightermonday" });
+  await enqueueDiscoverAggregator({ source: "fuzu" });
+  await enqueueDiscoverAggregator({ source: "ngcareers" });
   return all.length;
 }
 
