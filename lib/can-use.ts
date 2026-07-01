@@ -1,13 +1,26 @@
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
 import { getBalance } from "@/lib/credits";
 import { isSubscriber, getEntitlement } from "@/lib/subscription";
 
 export const NO_CREDIT_MESSAGE = "Please add credits to use Sasa.";
 export const PLAN_LIMIT_MESSAGE = "You have reached your plan's limit for this cycle. Upgrade or wait for the reset.";
+export const SUSPENDED_MESSAGE = "Your account has been suspended. Contact support@usesasa.xyz.";
+
+// Whether an admin has suspended this account. A suspended user is blocked from every
+// paid Sasa action and from the dashboard.
+export async function isSuspended(userId: string): Promise<boolean> {
+  const u = await db.query.users.findFirst({ where: eq(users.id, userId), columns: { suspendedAt: true } });
+  return !!u?.suspendedAt;
+}
 
 // The single gate for every Sasa action that costs money (extension + Telegram bot).
-// Credits users (Nigeria / free) need at least 1 credit; subscribers (international)
-// need allowance left in the cycle. Returns a user-facing error when blocked.
+// Suspended accounts are blocked outright. Otherwise credits users (Nigeria / free)
+// need at least 1 credit; subscribers (international) need allowance left in the cycle.
+// Returns a user-facing error when blocked.
 export async function canUseSasa(userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (await isSuspended(userId)) return { ok: false, error: SUSPENDED_MESSAGE };
   if (await isSubscriber(userId)) {
     const ent = await getEntitlement(userId);
     return ent.remaining > 0 ? { ok: true } : { ok: false, error: PLAN_LIMIT_MESSAGE };

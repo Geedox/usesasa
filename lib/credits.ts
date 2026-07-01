@@ -179,6 +179,20 @@ export async function retryCreditBlockedApplications(userId: string): Promise<nu
   return n;
 }
 
+// Admin grant or deduction. delta may be positive (grant) or negative (claw back).
+// Never lets the recorded balance go below 0. Returns the new balance.
+export async function adminAdjustCredits(userId: string, delta: number): Promise<number> {
+  const balance = await getBalance(userId);
+  // Clamp a deduction so we never write a negative balance.
+  const applied = delta < 0 ? -Math.min(-delta, balance) : delta;
+  if (applied === 0) return balance;
+  const after = balance + applied;
+  await db.insert(creditLedger).values({ userId, delta: applied, reason: "manual_adjustment", balanceAfter: after });
+  // A top-up may unstick applications that were parked waiting on credits.
+  if (applied > 0) await retryCreditBlockedApplications(userId).catch((e) => console.error("[credit-retry] failed:", e));
+  return after;
+}
+
 // Add credits (e.g. a Paystack pack purchase). Returns the new balance.
 export async function addCredits(
   userId: string,
