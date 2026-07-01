@@ -1,6 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { creditLedger } from "@/lib/db/schema";
+import { creditLedger, applications } from "@/lib/db/schema";
+import { enqueueTailorApplication, enqueueSubmitApplication } from "@/lib/queue";
 
 const SIGNUP_BONUS = 10;
 export const INTERVIEW_COST = 24; // credits per interview-prep booking (covers mentor pay + margin)
@@ -127,6 +128,36 @@ export async function refundInterview(userId: string, bookingId: string): Promis
   return after;
 }
 
+// After a top-up, re-queue any application that was parked in needs_user only because
+// the user ran out of credits. A human still approves everything:
+//   - already tailored (approved to submit, then blocked at charge) -> re-queue submit.
+//   - never tailored (blocked before tailoring) -> re-tailor; it lands back in review.
+// The worker re-checks credits per app, so this is safe even if the top-up does not
+// cover every stuck application.
+export async function retryCreditBlockedApplications(userId: string): Promise<number> {
+  const stuck = await db
+    .select({ id: applications.id, tailoredCv: applications.tailoredCv })
+    .from(applications)
+    .where(and(
+      eq(applications.userId, userId),
+      eq(applications.state, "needs_user"),
+      ilike(applications.submissionNote, "%credit%"),
+    ));
+
+  let n = 0;
+  for (const a of stuck) {
+    if (a.tailoredCv) {
+      await db.update(applications).set({ state: "queued", submissionNote: null }).where(eq(applications.id, a.id));
+      await enqueueSubmitApplication({ applicationId: a.id });
+    } else {
+      await db.update(applications).set({ state: "drafted", submissionNote: null }).where(eq(applications.id, a.id));
+      await enqueueTailorApplication({ applicationId: a.id });
+    }
+    n++;
+  }
+  return n;
+}
+
 // Add credits (e.g. a Paystack pack purchase). Returns the new balance.
 export async function addCredits(
   userId: string,
@@ -137,5 +168,7 @@ export async function addCredits(
   const balance = await getBalance(userId);
   const after = balance + amount;
   await db.insert(creditLedger).values({ userId, delta: amount, reason, relatedId, balanceAfter: after });
+  // Best-effort: resume anything that was stuck waiting on credits.
+  await retryCreditBlockedApplications(userId).catch((e) => console.error("[credit-retry] failed:", e));
   return after;
 }
