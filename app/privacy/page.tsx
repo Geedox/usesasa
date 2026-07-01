@@ -29,6 +29,18 @@ const sections: LegalSection[] = [
           "Log data for security and troubleshooting.",
         ],
       },
+      { sub: "Browser extension data" },
+      {
+        p: "When you use the Sasa Chrome extension on a job application page, it reads the content of that page (the application form fields, and the role and company) so it can fill the form from the profile you saved. It acts only on the page you are actively viewing, and only when you engage the widget.",
+      },
+      {
+        list: [
+          "It reads the job application page you open, not your browsing history or your other tabs.",
+          "It uses your signed in Sasa session, stored locally on your device, to load your profile and save applications to your tracker.",
+          "It never submits an application without your review and approval.",
+          "It does not run in the background across other websites, and does not sell or share this data.",
+        ],
+      },
       { sub: "Email integration data" },
       {
         p: "If you connect your Gmail account, you grant read only access. We process a limited set of recent messages for two purposes only: to detect and autofill the one time passwords (OTPs) and verification links that job sites send during an application, and to match recruiter replies to the right application so your tracker stays current.",
