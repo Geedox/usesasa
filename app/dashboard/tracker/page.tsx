@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { applications, jobs, companies } from "@/lib/db/schema";
 import { TrackerBoard, type TrackerCard, type Column } from "@/components/dashboard/tracker-board";
 import { CreditGate } from "@/components/dashboard/credit-gate";
-import { canUseSasa } from "@/lib/can-use";
+import { belowCreditFloor } from "@/lib/can-use";
 
 const THIRTY_DAYS = 30 * 86400000;
 
@@ -55,7 +55,7 @@ export default async function TrackerPage() {
     column: columnFor(r.pipelineStatus, r.submittedAt),
   }));
 
-  const blocked = !(await canUseSasa(session.user.id)).ok;
+  const blocked = await belowCreditFloor(session.user.id);
 
   return (
     <CreditGate blocked={blocked}>

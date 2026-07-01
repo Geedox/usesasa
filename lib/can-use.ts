@@ -14,3 +14,14 @@ export async function canUseSasa(userId: string): Promise<{ ok: true } | { ok: f
   }
   return (await getBalance(userId)) >= 1 ? { ok: true } : { ok: false, error: NO_CREDIT_MESSAGE };
 }
+
+// Whether to show the "add credits" gate on the dashboard/browse/tracker. We prompt a
+// bit earlier than the hard action gate (default at 1 credit or fewer), since a full
+// application costs more than one credit, so users top up before getting stuck.
+// Subscribers are only gated when their plan allowance is used up.
+export async function belowCreditFloor(userId: string, floor = 1): Promise<boolean> {
+  if (await isSubscriber(userId)) {
+    return (await getEntitlement(userId)).remaining <= 0;
+  }
+  return (await getBalance(userId)) <= floor;
+}

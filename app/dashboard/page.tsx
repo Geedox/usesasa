@@ -16,7 +16,7 @@ import { ReferralBanner } from "@/components/dashboard/referral-banner";
 import { CreditGate } from "@/components/dashboard/credit-gate";
 import { DashboardTabs } from "@/components/dashboard/dashboard-tabs";
 import { MATCH_THRESHOLD } from "@/lib/matching/score";
-import { canUseSasa } from "@/lib/can-use";
+import { belowCreditFloor } from "@/lib/can-use";
 import { SITE_URL } from "@/lib/site";
 
 function timeAgo(date: Date | null): string {
@@ -95,7 +95,7 @@ export default async function DashboardPage({
   const sponsor = sponsorParam === "1";
 
   // Blur the dashboard when the user has no usable credits (also stops their scans).
-  const blocked = session ? !(await canUseSasa(session.user.id)).ok : false;
+  const blocked = session ? await belowCreditFloor(session.user.id) : false;
 
   const rows = session
     ? await db

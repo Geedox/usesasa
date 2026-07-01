@@ -9,7 +9,7 @@ import { CompanyAvatar } from "@/components/dashboard/company-avatar";
 import { MatchRing } from "@/components/dashboard/match-ring";
 import { BrowseFilters } from "@/components/dashboard/browse-filters";
 import { CreditGate } from "@/components/dashboard/credit-gate";
-import { canUseSasa } from "@/lib/can-use";
+import { belowCreditFloor } from "@/lib/can-use";
 import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
 
 const PAGE_SIZE = 20;
@@ -84,7 +84,7 @@ export default async function BrowsePage({
   const lvl = SENIORITY.find((s) => s.key === lvlParam)?.key ?? "";
   const work = WORKPLACE.find((w) => w.key === workParam)?.key ?? "";
   const sponsor = sponsorParam === "1";
-  const blocked = !(await canUseSasa(session.user.id)).ok;
+  const blocked = await belowCreditFloor(session.user.id);
 
   const where = and(
     eq(matchesTable.userId, session.user.id),

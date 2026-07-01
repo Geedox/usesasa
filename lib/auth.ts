@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users, sessions, accounts, verifications } from "@/lib/db/schema";
 import { sendEmail, buildWelcomeEmail, buildOtpEmail } from "@/lib/email";
 import { ensureReferralCode } from "@/lib/referral";
+import { ensureSignupBonus } from "@/lib/credits";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -51,7 +52,8 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
-          // Generate the user's permanent referral code once, at signup.
+          // Grant the free-trial credits + a permanent referral code once, at signup.
+          await ensureSignupBonus(user.id).catch((e) => console.error("[signup-bonus] failed:", e));
           await ensureReferralCode(user.id).catch((e) => console.error("[referral] code gen failed:", e));
           // Welcome email is best-effort: never let it affect sign-up.
           try {

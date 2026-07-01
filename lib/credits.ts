@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { creditLedger } from "@/lib/db/schema";
 
-const SIGNUP_BONUS = 5;
+const SIGNUP_BONUS = 10;
 export const INTERVIEW_COST = 24; // credits per interview-prep booking (covers mentor pay + margin)
 
 // Credits expire 30 days after they are granted if unused, so people can't load up

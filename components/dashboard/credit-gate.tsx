@@ -12,10 +12,10 @@ export function CreditGate({ blocked, children }: { blocked: boolean; children: 
       </div>
       <div className="fixed inset-0 z-50 flex items-start justify-center px-6 pt-32">
         <div className="w-full max-w-md rounded-xl border border-foreground/10 bg-background p-6 text-center">
-          <div className="text-base font-semibold mb-2">Add credits to use Sasa</div>
+          <div className="text-base font-semibold mb-2">Add credits to keep applying</div>
           <p className="text-sm text-muted-foreground mb-5">
-            You are out of credits. Top up to browse your matches, tailor your CV, and submit applications.
-            Scanning for new jobs is paused until you add credits.
+            You are low on credits. Top up to browse your matches, tailor your CV, and submit applications.
+            A full application costs more than one credit, so add more to keep Sasa working for you.
           </p>
           <Link
             href="/dashboard/settings?tab=billing"

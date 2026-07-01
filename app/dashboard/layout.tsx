@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
-import { creditLedger, mentors, users } from "@/lib/db/schema";
+import { mentors, users } from "@/lib/db/schema";
+import { getBalance, ensureSignupBonus } from "@/lib/credits";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -13,13 +14,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const me = await db.query.users.findFirst({ where: eq(users.id, session.user.id), columns: { onboardedAt: true } });
   if (!me?.onboardedAt) redirect("/onboarding");
 
-  // Credit balance from the ledger (placeholder: defaults to the 5 free-trial credits).
-  const rows = await db
-    .select({ delta: creditLedger.delta })
-    .from(creditLedger)
-    .where(eq(creditLedger.userId, session.user.id));
-  const balance = rows.reduce((sum, r) => sum + r.delta, 0);
-  const credits = rows.length > 0 ? balance : 5;
+  // Grant the free-trial credits once (backfills anyone created before the signup hook),
+  // then read the real balance from the ledger.
+  await ensureSignupBonus(session.user.id).catch(() => {});
+  const credits = await getBalance(session.user.id);
 
   // Approved mentors get a Mentor dashboard link in the sidebar.
   const mentor = await db.query.mentors.findFirst({ where: eq(mentors.userId, session.user.id) });
