@@ -1,8 +1,10 @@
 import { getSession } from "@/lib/get-session";
 
 // Admins are an env allowlist (comma-separated emails). The secret admin URL is
-// obscurity; this email check is the real gate. Defaults to the founder.
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "samuel@engramiq.com")
+// obscurity; this email check is the real gate. Set ADMIN_EMAILS to override the
+// default team below.
+const DEFAULT_ADMIN_EMAILS = "usotex@gmail.com,usorohdev@gmail.com,onahjonah@gmail.com";
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAILS)
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
