@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string };
     location?: { city?: string; country?: string; state?: string };
     workEligibility?: { authorizedCountries?: string[]; needsSponsorship?: boolean; sponsorshipCountries?: string[] };
-    comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
+    comp?: { salaryExpectation?: string; salaryCurrency?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
   } | null) ?? {};
 
   const applicant = {
@@ -50,6 +50,7 @@ export async function POST(req: Request) {
     needsSponsorship: onboarding.workEligibility?.needsSponsorship,
     sponsorshipCountries: onboarding.workEligibility?.sponsorshipCountries,
     salaryExpectation: onboarding.comp?.salaryExpectation,
+    salaryCurrency: onboarding.comp?.salaryCurrency,
     salaryPeriod: onboarding.comp?.salaryPeriod,
     noticePeriod: onboarding.comp?.noticePeriod,
     yearsExperience: onboarding.comp?.yearsExperience,

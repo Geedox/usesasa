@@ -14,7 +14,7 @@ type WizardData = {
   location: { address: string; city: string; postalCode: string; district: string; country: string; state: string };
   contact: { phone: string; linkedin: string; github: string; portfolio: string };
   workEligibility: { authorizedCountries: string[]; needsSponsorship: boolean; sponsorshipCountries: string[] };
-  comp: { salaryExpectation: string; salaryPeriod: string; noticePeriod: string; yearsExperience: string };
+  comp: { salaryExpectation: string; salaryCurrency: string; salaryPeriod: string; noticePeriod: string; yearsExperience: string };
   checklist: {
     openToInPerson: boolean; willingToRelocate: boolean; canStartImmediately: boolean;
     reliableTransport: boolean; accommodations: Tri; govClearance: boolean; foreignGovTies: boolean;
@@ -32,7 +32,7 @@ const initialData: WizardData = {
   location: { address: "", city: "", postalCode: "", district: "", country: "", state: "" },
   contact: { phone: "", linkedin: "", github: "", portfolio: "" },
   workEligibility: { authorizedCountries: [], needsSponsorship: false, sponsorshipCountries: [] },
-  comp: { salaryExpectation: "", salaryPeriod: "year", noticePeriod: "", yearsExperience: "" },
+  comp: { salaryExpectation: "", salaryCurrency: "NGN", salaryPeriod: "year", noticePeriod: "", yearsExperience: "" },
   checklist: {
     openToInPerson: true, willingToRelocate: false, canStartImmediately: true, reliableTransport: true,
     accommodations: "prefer_not", govClearance: false, foreignGovTies: false,
@@ -514,17 +514,27 @@ export function OnboardingWizard({
                         <Input value={data.comp.salaryExpectation} placeholder="e.g. 90,000 or Negotiable"
                           onChange={(e) => set("comp", { ...data.comp, salaryExpectation: e.target.value })} />
                       </Field>
-                      <Field label="Per">
+                      <Field label="Currency">
                         <div className="inline-flex rounded-lg bg-foreground/5 p-1">
-                          {["year", "month", "hour"].map((p) => (
-                            <button key={p} type="button" onClick={() => set("comp", { ...data.comp, salaryPeriod: p })}
-                              className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer capitalize ${data.comp.salaryPeriod === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
-                              {p}
+                          {["NGN", "USD", "GBP", "EUR"].map((c) => (
+                            <button key={c} type="button" onClick={() => set("comp", { ...data.comp, salaryCurrency: c })}
+                              className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer ${data.comp.salaryCurrency === c ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
+                              {c}
                             </button>
                           ))}
                         </div>
                       </Field>
                     </div>
+                    <Field label="Per">
+                      <div className="inline-flex rounded-lg bg-foreground/5 p-1">
+                        {["year", "month", "hour"].map((p) => (
+                          <button key={p} type="button" onClick={() => set("comp", { ...data.comp, salaryPeriod: p })}
+                            className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer capitalize ${data.comp.salaryPeriod === p ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
                     <Field label="Notice period">
                       <div className="flex flex-wrap gap-2">
                         {["Immediately", "1 week", "2 weeks", "1 month", "2 months", "3 months"].map((n) => (

@@ -20,6 +20,7 @@ export type Applicant = {
   needsSponsorship?: boolean;
   sponsorshipCountries?: string[];
   salaryExpectation?: string;
+  salaryCurrency?: string;
   salaryPeriod?: string;
   noticePeriod?: string;
   yearsExperience?: string;
@@ -75,7 +76,7 @@ ${qList}
 
 Rules:
 - ${honesty}
-- Use APPLICANT DETAILS for logistics: salary/compensation expectation (salaryExpectation + salaryPeriod, e.g. "90,000 per year"; if asked for a number only, give the number; if blank, answer "Negotiable" or "Open to discussion"), notice period / availability / earliest start date (noticePeriod, e.g. "2 weeks"; "Immediately" means available now), and total years of experience (yearsExperience).
+- Use APPLICANT DETAILS for logistics: salary/compensation expectation (salaryCurrency + salaryExpectation + salaryPeriod, e.g. "NGN 90,000 per year"; include the currency when giving an amount; if asked for a number only, give the number; if blank, answer "Negotiable" or "Open to discussion"), notice period / availability / earliest start date (noticePeriod, e.g. "2 weeks"; "Immediately" means available now), and total years of experience (yearsExperience).
 - Use APPLICANT DETAILS to answer phone, location/city, country, and work eligibility questions. For "are you authorized to work in <country>", answer truthfully from authorizedCountries and needsSponsorship (if the role's country is not one they are authorized in and they need sponsorship, the honest answer is "No"). For "source of right to work", if they need sponsorship and have none, choose the option that means they require sponsorship, or leave it empty if no such option fits.
 - For voluntary or demographic self-identification questions (gender, race, ethnicity, veteran status, disability) where the candidate gave no data, do NOT leave it empty. Answer with the neutral decline option these fields always offer, such as "Decline to self identify", "Prefer not to say", "I do not wish to answer", or "I don't wish to answer". Match the wording of a listed option when options are given.
 - For a [select] or [radio], return EXACTLY one of the listed options, copied verbatim. These are all REQUIRED, so NEVER leave a select or radio empty: if no option fits the candidate's situation (e.g. a US-state list for a candidate based abroad), pick the least-committal listed option that still lets the form proceed, in this order of preference: an "Other"/"Not applicable"/"N/A"/"Outside the US"/"Remote"/"Prefer not to say"/"Decline" style option if present, otherwise the option closest to their real situation, otherwise the first non-placeholder option.
