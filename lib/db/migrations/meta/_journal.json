@@ -1,0 +1,69 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781679937729,
+      "tag": "0000_calm_gressill",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781681139703,
+      "tag": "0001_cheerful_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781687240841,
+      "tag": "0002_happy_rage",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781688729544,
+      "tag": "0003_romantic_vision",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781704092618,
+      "tag": "0004_groovy_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781705710480,
+      "tag": "0005_daffy_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782325305942,
+      "tag": "0006_outgoing_mach_iv",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782539101796,
+      "tag": "0007_plain_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782911036609,
+      "tag": "0008_smart_husk",
+      "breakpoints": true
+    }
+  ]
+}

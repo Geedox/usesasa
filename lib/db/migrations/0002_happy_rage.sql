@@ -1,0 +1,1 @@
+ALTER TABLE "profiles" ALTER COLUMN "parsed_data" DROP NOT NULL;

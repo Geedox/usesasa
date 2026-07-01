@@ -6,6 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Node-only libs that must not be bundled (loaded at runtime on the server).
+  serverExternalPackages: ["pg-boss", "pdfkit"],
 }
 
 export default nextConfig

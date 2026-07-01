@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { AnimatedTetrahedron } from "./animated-tetrahedron";
-import { useBetaModal } from "./beta-modal";
+import Link from "next/link";
 
 export function CtaSection() {
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const { open } = useBetaModal();
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -71,11 +70,13 @@ export function CtaSection() {
                 <div className="flex flex-col sm:flex-row items-start gap-4">
                   <Button
                     size="lg"
-                    onClick={open}
+                    asChild
                     className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group cursor-pointer"
                   >
-                    Join the beta
-                    <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                    <Link href="/login">
+                      Get started
+                      <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                    </Link>
                   </Button>
                   <Button
                     size="lg"

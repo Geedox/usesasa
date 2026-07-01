@@ -32,7 +32,7 @@ next-env.d.ts
 *.zip
 stats.html
 
-# tooling
+# tooling (local-only, not pushed)
 .specify/
 .claude/
 
