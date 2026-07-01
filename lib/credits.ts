@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { creditLedger } from "@/lib/db/schema";
 
@@ -67,14 +67,17 @@ export async function creditStatus(
 
 // Grant the free-trial credits once (FRD §5.7.4). Returns the current balance.
 export async function ensureSignupBonus(userId: string): Promise<number> {
+  // Grant once, keyed on the signup_bonus reason (not "any ledger row"), so users who
+  // were created before the signup hook — but already have other entries, e.g. a
+  // purchase — still get their trial credits backfilled on next load.
   const existing = await db
     .select({ id: creditLedger.id })
     .from(creditLedger)
-    .where(eq(creditLedger.userId, userId))
+    .where(and(eq(creditLedger.userId, userId), eq(creditLedger.reason, "signup_bonus")))
     .limit(1);
   if (existing.length === 0) {
-    await db.insert(creditLedger).values({ userId, delta: SIGNUP_BONUS, reason: "signup_bonus", balanceAfter: SIGNUP_BONUS });
-    return SIGNUP_BONUS;
+    const after = (await getBalance(userId)) + SIGNUP_BONUS;
+    await db.insert(creditLedger).values({ userId, delta: SIGNUP_BONUS, reason: "signup_bonus", balanceAfter: after });
   }
   return getBalance(userId);
 }
