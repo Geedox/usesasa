@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "@/lib/db";
@@ -6,6 +7,7 @@ import { users, sessions, accounts, verifications } from "@/lib/db/schema";
 import { sendEmail, buildWelcomeEmail, buildOtpEmail } from "@/lib/email";
 import { ensureReferralCode } from "@/lib/referral";
 import { ensureSignupBonus } from "@/lib/credits";
+import { normalizeEmail, isDisposableEmail } from "@/lib/email-normalize";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -51,6 +53,14 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
+        // Anti-abuse: block disposable/temp-mail domains, and stamp a normalized email
+        // (plus/dot aliases collapsed) so the signup bonus can't be farmed with aliases.
+        before: async (user) => {
+          if (isDisposableEmail(user.email)) {
+            throw new APIError("BAD_REQUEST", { message: "Please sign up with a permanent email address." });
+          }
+          return { data: { ...user, normalizedEmail: normalizeEmail(user.email) } };
+        },
         after: async (user) => {
           // Grant the free-trial credits + a permanent referral code once, at signup.
           await ensureSignupBonus(user.id).catch((e) => console.error("[signup-bonus] failed:", e));

@@ -89,6 +89,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  // Canonical email (plus/dot aliases collapsed) — anti-abuse dedup for the signup bonus.
+  normalizedEmail: text("normalized_email"),
   // app-specific
   fullName: text("full_name"),
   phone: text("phone"),
@@ -102,7 +104,7 @@ export const users = pgTable("users", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("users_normalized_email_idx").on(t.normalizedEmail)]);
 
 // ---- Better Auth: sessions ----
 export const sessions = pgTable("sessions", {

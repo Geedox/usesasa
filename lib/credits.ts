@@ -1,7 +1,8 @@
 import { and, eq, ilike } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { creditLedger, applications } from "@/lib/db/schema";
+import { creditLedger, applications, users } from "@/lib/db/schema";
 import { enqueueTailorApplication, enqueueSubmitApplication } from "@/lib/queue";
+import { normalizeEmail } from "@/lib/email-normalize";
 
 const SIGNUP_BONUS = 10;
 export const INTERVIEW_COST = 24; // credits per interview-prep booking (covers mentor pay + margin)
@@ -68,18 +69,38 @@ export async function creditStatus(
 
 // Grant the free-trial credits once (FRD §5.7.4). Returns the current balance.
 export async function ensureSignupBonus(userId: string): Promise<number> {
-  // Grant once, keyed on the signup_bonus reason (not "any ledger row"), so users who
-  // were created before the signup hook — but already have other entries, e.g. a
-  // purchase — still get their trial credits backfilled on next load.
-  const existing = await db
+  // Already granted to this user? (keyed on the reason, so a user with only a purchase
+  // still gets backfilled).
+  const own = await db
     .select({ id: creditLedger.id })
     .from(creditLedger)
     .where(and(eq(creditLedger.userId, userId), eq(creditLedger.reason, "signup_bonus")))
     .limit(1);
-  if (existing.length === 0) {
-    const after = (await getBalance(userId)) + SIGNUP_BONUS;
-    await db.insert(creditLedger).values({ userId, delta: SIGNUP_BONUS, reason: "signup_bonus", balanceAfter: after });
+  if (own.length > 0) return getBalance(userId);
+
+  // Resolve this user's normalized email, backfilling it for accounts created before
+  // the signup hook stamped it.
+  const u = await db.query.users.findFirst({ where: eq(users.id, userId), columns: { email: true, normalizedEmail: true } });
+  let norm = u?.normalizedEmail ?? null;
+  if (!norm && u?.email) {
+    norm = normalizeEmail(u.email);
+    await db.update(users).set({ normalizedEmail: norm }).where(eq(users.id, userId)).catch(() => {});
   }
+
+  // Alias guard: if another account with the same normalized email already claimed the
+  // bonus, don't grant a fresh one (blocks the gmail plus/dot farming trick).
+  if (norm) {
+    const dup = await db
+      .select({ id: creditLedger.id })
+      .from(creditLedger)
+      .innerJoin(users, eq(creditLedger.userId, users.id))
+      .where(and(eq(users.normalizedEmail, norm), eq(creditLedger.reason, "signup_bonus")))
+      .limit(1);
+    if (dup.length > 0) return getBalance(userId);
+  }
+
+  const after = (await getBalance(userId)) + SIGNUP_BONUS;
+  await db.insert(creditLedger).values({ userId, delta: SIGNUP_BONUS, reason: "signup_bonus", balanceAfter: after });
   return getBalance(userId);
 }
 
