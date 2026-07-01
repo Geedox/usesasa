@@ -409,6 +409,15 @@ async function handleCodeReply(chatId: number | string, text: string): Promise<v
 
 // Long-poll getUpdates forever. Runs in the worker; no public webhook needed.
 export async function startTelegramPolling(): Promise<void> {
+  // Telegram allows only ONE getUpdates poller per bot token. If more than one
+  // worker runs on the same token (e.g. staging + production), they fight and log
+  // endless "Conflict: terminated by other getUpdates request". So polling is
+  // opt-in: set RUN_TELEGRAM_BOT=1 on exactly one worker (production). Leave it
+  // unset everywhere else.
+  if (process.env.RUN_TELEGRAM_BOT !== "1") {
+    console.log("[telegram] polling disabled — set RUN_TELEGRAM_BOT=1 on exactly one worker to enable review nudges");
+    return;
+  }
   if (!telegramEnabled()) {
     console.log("[telegram] TELEGRAM_BOT_TOKEN not set — review nudges disabled");
     return;

@@ -30,39 +30,60 @@ export async function parseCvForProfile(profileId: string, cvPublicId: string): 
     return;
   }
 
-  // Operational failures below THROW so the queue retries (with backoff).
-  const url = cloudinary.url(cvPublicId, {
-    resource_type: "raw",
-    type: "authenticated",
-    sign_url: true,
-    secure: true,
-  });
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`[parse] could not fetch CV from Cloudinary: ${res.status}`);
+  // Operational failures below THROW so the queue retries (with backoff). Each step
+  // is labelled so a failure shows up in the worker log instead of a silent stall.
+  let step = "cloudinary_url";
+  try {
+    const url = cloudinary.url(cvPublicId, {
+      resource_type: "raw",
+      type: "authenticated",
+      sign_url: true,
+      secure: true,
+    });
+
+    // Fetch the CV, but never hang: fail after 30s so the queue can retry.
+    step = "cloudinary_fetch";
+    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) {
+      // A 401/404 here usually means the worker's CLOUDINARY_API_SECRET does not
+      // match the web service that uploaded the file (mismatched environment).
+      throw new Error(
+        `Cloudinary returned ${res.status} for ${cvPublicId}. Check that this worker shares the same CLOUDINARY_* credentials as the web app that uploaded it.`,
+      );
+    }
+    const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+
+    // 3-minute cap on the model call, with a couple of automatic retries, so a slow
+    // or stuck request fails loudly rather than hanging the whole onboarding.
+    step = "anthropic_parse";
+    const anthropic = new Anthropic({ apiKey, timeout: 180_000, maxRetries: 2 });
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
+            { type: "text", text: PROMPT },
+          ],
+        },
+      ],
+    });
+
+    step = "json_parse";
+    const textPart = msg.content.find((c) => c.type === "text");
+    const raw = textPart && "text" in textPart ? textPart.text : "";
+    const jsonStr = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+    if (!jsonStr) throw new Error("model returned no JSON object");
+    const parsed = JSON.parse(jsonStr);
+
+    step = "db_write";
+    await db.update(profiles).set({ parsedData: parsed }).where(eq(profiles.id, profileId));
+    console.log("[parse] profile parsed:", profileId);
+  } catch (err) {
+    const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`[parse] FAILED profile=${profileId} step=${step}: ${reason}`);
+    throw err; // let pg-boss retry with backoff
   }
-  const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
-
-  const anthropic = new Anthropic({ apiKey });
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-          { type: "text", text: PROMPT },
-        ],
-      },
-    ],
-  });
-
-  const textPart = msg.content.find((c) => c.type === "text");
-  const raw = textPart && "text" in textPart ? textPart.text : "";
-  const jsonStr = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
-  const parsed = JSON.parse(jsonStr);
-
-  await db.update(profiles).set({ parsedData: parsed }).where(eq(profiles.id, profileId));
-  console.log("[parse] profile parsed:", profileId);
 }
