@@ -11,7 +11,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session) redirect("/login");
 
   // Must finish onboarding before using the dashboard; resume the wizard otherwise.
-  const me = await db.query.users.findFirst({ where: eq(users.id, session.user.id), columns: { onboardedAt: true } });
+  const me = await db.query.users.findFirst({
+    where: eq(users.id, session.user.id),
+    columns: { onboardedAt: true, suspendedAt: true },
+  });
+  // Suspended accounts can't reach the dashboard.
+  if (me?.suspendedAt) redirect("/suspended");
   if (!me?.onboardedAt) redirect("/onboarding");
 
   // Grant the free-trial credits once (backfills anyone created before the signup hook),

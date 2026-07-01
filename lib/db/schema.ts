@@ -101,6 +101,10 @@ export const users = pgTable("users", {
   telegramChatId: text("telegram_chat_id"), // set once the user links their Telegram
   telegramLinkToken: text("telegram_link_token"), // short-lived deep-link token for pairing
   referralCode: text("referral_code").unique(), // the user's own 6-char code, generated once at signup
+  // Admin moderation: set when an admin suspends the account. A suspended user is
+  // blocked from every paid Sasa action (dashboard, extension, Telegram, submissions).
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspendedReason: text("suspended_reason"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
