@@ -63,6 +63,10 @@ export function EmailIntegrations({
   const [n, setN] = useState<EmailNotifications>(notifications);
   const [busy, setBusy] = useState(false);
 
+  // Gmail connect is gated off until Google OAuth verification is approved. Flip it on
+  // (no code change) with NEXT_PUBLIC_GMAIL_ENABLED=1 once verified.
+  const gmailEnabled = process.env.NEXT_PUBLIC_GMAIL_ENABLED === "1";
+
   const connected = hasScope && enabled;
 
   const update = (patch: Partial<EmailNotifications>) => {
@@ -126,7 +130,20 @@ export function EmailIntegrations({
           </p>
         </div>
 
-        {connected ? (
+        {!gmailEnabled ? (
+          <div className="mx-auto max-w-md">
+            <div className="rounded-xl border border-foreground/10 bg-foreground/[0.02] p-6 text-center">
+              <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-foreground/[0.06]">
+                <Mail className="h-6 w-6" />
+              </span>
+              <p className="text-sm font-medium mb-1">Coming soon</p>
+              <p className="text-sm text-muted-foreground">
+                Gmail connect is being finalized. Soon you will be able to link your inbox so Sasa can grab
+                verification codes from your applications automatically.
+              </p>
+            </div>
+          </div>
+        ) : connected ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 shrink-0">
               <Check className="h-5 w-5" />
