@@ -58,7 +58,9 @@ export async function parseCvForProfile(profileId: string, cvPublicId: string): 
     step = "anthropic_parse";
     const anthropic = new Anthropic({ apiKey, timeout: 180_000, maxRetries: 2 });
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      // Haiku is plenty for structured extraction from a CV and costs a fraction of
+      // Sonnet. Bump to a larger model only if extraction quality drops.
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 4096,
       messages: [
         {

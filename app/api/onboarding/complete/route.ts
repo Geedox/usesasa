@@ -8,6 +8,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { enqueueScoreUser } from "@/lib/queue";
 import { enqueueCrawlAll } from "@/lib/discovery/cycle";
 import { consumeSignupReferral } from "@/lib/referral";
+import { chargeForOnboarding } from "@/lib/credits";
 
 // Persists the onboarding wizard answers and marks the user onboarded.
 export async function POST(req: Request) {
@@ -51,6 +52,10 @@ export async function POST(req: Request) {
   // Only mark onboarded on the final step (autosaves pass finalize=false).
   if (finalize === true) {
     await db.update(users).set({ onboardedAt: new Date() }).where(eq(users.id, userId));
+
+    // Take the one-off onboarding fee (covers the CV parse). Idempotent + best effort:
+    // a hiccup here must not fail onboarding.
+    await chargeForOnboarding(userId).catch((err) => console.error("[onboarding] credit charge failed:", err));
 
     // Reward the referrer (+5, once) if this user signed up with a referral code.
     try {
