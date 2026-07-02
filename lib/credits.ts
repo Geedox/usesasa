@@ -5,6 +5,7 @@ import { enqueueTailorApplication, enqueueSubmitApplication } from "@/lib/queue"
 import { normalizeEmail } from "@/lib/email-normalize";
 
 const SIGNUP_BONUS = 10;
+export const ONBOARDING_COST = 2; // credits taken once, for the CV parse run during onboarding
 export const INTERVIEW_COST = 24; // credits per interview-prep booking (covers mentor pay + margin)
 
 // Credits expire 30 days after they are granted if unused, so people can't load up
@@ -102,6 +103,25 @@ export async function ensureSignupBonus(userId: string): Promise<number> {
   const after = (await getBalance(userId)) + SIGNUP_BONUS;
   await db.insert(creditLedger).values({ userId, delta: SIGNUP_BONUS, reason: "signup_bonus", balanceAfter: after });
   return getBalance(userId);
+}
+
+// Charge the one-off onboarding fee (covers the CV parse LLM cost). Idempotent:
+// only ever charged once per user, and clamped so the balance never goes below 0.
+// Returns the new balance.
+export async function chargeForOnboarding(userId: string): Promise<number> {
+  const already = await db
+    .select({ id: creditLedger.id })
+    .from(creditLedger)
+    .where(and(eq(creditLedger.userId, userId), eq(creditLedger.reason, "onboarding_charge")))
+    .limit(1);
+  if (already.length > 0) return getBalance(userId);
+
+  const balance = await getBalance(userId);
+  const amount = Math.min(ONBOARDING_COST, balance); // don't push the balance negative
+  if (amount <= 0) return balance;
+  const after = balance - amount;
+  await db.insert(creditLedger).values({ userId, delta: -amount, reason: "onboarding_charge", balanceAfter: after });
+  return after;
 }
 
 // Debit 1 credit for a successful submission. Refuses below 0. Returns the new balance, or null if no credits.

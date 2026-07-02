@@ -66,6 +66,7 @@ export type LedgerReason =
   | "paystack_purchase"
   | "tailoring_charge" // 1 credit when we tailor a CV + cover letter for a role
   | "application_charge" // 1 credit when an application is submitted
+  | "onboarding_charge" // 2 credits for the CV parse done during onboarding
   | "interview_booking" // 24 credits spent booking an interview-prep call
   | "interview_refund" // those 3 credits returned when the call is cancelled
   | "referral_bonus" // credits earned from referring another user

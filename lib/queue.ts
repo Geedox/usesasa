@@ -60,8 +60,10 @@ export function getBoss(): Promise<PgBoss> {
 
 export async function enqueueParseCv(data: ParseCvJob): Promise<string | null> {
   const boss = await getBoss();
-  // Retries with exponential backoff if the worker handler throws.
-  return boss.send(QUEUES.PARSE_CV, data, { retryLimit: 5, retryBackoff: true });
+  // Retries with exponential backoff if the worker handler throws. Capped low: each
+  // retry re-sends the whole PDF to the model, so 5 retries meant paying for the
+  // parse up to 6 times on a misconfig. 2 is enough to ride out a transient blip.
+  return boss.send(QUEUES.PARSE_CV, data, { retryLimit: 2, retryBackoff: true });
 }
 
 export async function enqueueDiscoverCompany(data: DiscoverCompanyJob): Promise<string | null> {
