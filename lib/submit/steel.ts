@@ -1,12 +1,12 @@
 import Steel from "steel-sdk";
 import { chromium, type Browser } from "playwright";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { applications } from "@/lib/db/schema";
 import { getBalance, chargeForSubmission } from "@/lib/credits";
 import { isSubscriber, getEntitlement } from "@/lib/subscription";
 import { notifySubmitted, notifySubmissionBlocked } from "@/lib/telegram";
-import { enqueueAutoGrabCode } from "@/lib/queue";
+import { enqueueAutoGrabCode, enqueueConfirmTakeover } from "@/lib/queue";
 import { buildSubmitContext, type Ats } from "./input";
 import { nativeFillAndSubmit } from "./native-fill";
 
@@ -171,6 +171,12 @@ export async function processSteelSubmission(applicationId: string): Promise<voi
   // If we are waiting on an emailed code and the user has Gmail connected, try to
   // grab it automatically and resume — falling back to manual entry if not found.
   if (awaitingCode) await enqueueAutoGrabCode({ applicationId, attempt: 0 }).catch(() => null);
+
+  // Paused with a live session (e.g. captcha): the user can finish it by hand in the
+  // live browser. Poll that session so a manual completion is detected + charged.
+  if (result === "needs_user" && sessionId) {
+    await enqueueConfirmTakeover({ applicationId, attempt: 0 }).catch(() => null);
+  }
 }
 
 // Resume a paused application by entering the verification code the user gave us.
@@ -209,5 +215,85 @@ export async function resumeWithCode(applicationId: string, code: string): Promi
     return { result: "failed", reason: `resume error: ${String(err).slice(0, 160)}` };
   } finally {
     await browser?.close().catch(() => {});
+  }
+}
+
+// Confirmation phrases an ATS shows after a successful submit. Text-based (reliable
+// across ATSes) and deliberately strict, so we never charge for a page that isn't a
+// real confirmation.
+const SUBMITTED_TEXT =
+  /(thank you for applying|thanks for applying|thank you for your (?:interest|application)|application (?:has been |was )?(?:received|submitted|sent|completed)|successfully (?:applied|submitted|sent)|we(?:'| ha)ve received your application|your application (?:is|has been) (?:complete|received|submitted)|application (?:complete|received|confirmation))/i;
+
+const MAX_TAKEOVER_ATTEMPTS = 40; // ~13 min at 20s spacing (inside the 15-min session)
+
+// Mark a cloud submission complete exactly once (guards against a double-charge if two
+// checks race). Charges 1 credit for credits users. Returns true if THIS call finalized it.
+async function finalizeCloudSubmission(applicationId: string, userId: string): Promise<boolean> {
+  const subscriber = await isSubscriber(userId);
+  const won = await db
+    .update(applications)
+    .set({
+      state: "submitted",
+      submittedAt: new Date(),
+      submittedVia: "cloud",
+      creditsCharged: subscriber ? 0 : 1,
+      pipelineStatus: "applied",
+      pipelineUpdatedAt: new Date(),
+      submissionNote: null,
+      awaitingCode: false,
+    })
+    .where(and(eq(applications.id, applicationId), ne(applications.state, "submitted")))
+    .returning({ id: applications.id });
+  if (won.length === 0) return false; // another path already finalized it
+
+  const balanceAfter = subscriber ? await getBalance(userId) : (await chargeForSubmission(userId, applicationId)) ?? 0;
+  await notifySubmitted(applicationId, balanceAfter);
+  return true;
+}
+
+// A submission paused for the user (captcha, tricky field, verification). The user can
+// finish it by hand in the live browser — this polls that same Steel session and, when
+// it sees the ATS confirmation page, marks the application submitted and charges the
+// credit (so a manual completion is billed just like an agent one). Re-enqueues itself
+// until confirmed, the session expires, or the cap is hit.
+export async function checkTakeoverSubmission(applicationId: string, attempt: number): Promise<void> {
+  const apiKey = process.env.STEEL_API_KEY;
+  if (!apiKey) return;
+
+  const app = await db.query.applications.findFirst({ where: eq(applications.id, applicationId) });
+  // Only while genuinely paused with a live session, and not already finished.
+  if (!app || app.state === "submitted" || app.state !== "needs_user" || !app.submissionSessionId) return;
+
+  let browser: Browser | null = null;
+  let confirmed = false;
+  let sessionGone = false;
+  try {
+    browser = await chromium.connectOverCDP(`wss://connect.steel.dev?sessionId=${app.submissionSessionId}&apiKey=${apiKey}`);
+    const page = browser.contexts()[0]?.pages()[0];
+    if (!page) {
+      sessionGone = true; // expired — stop polling; the user can start a fresh browser
+      return;
+    }
+    const snap = await page
+      .evaluate(() => ({ url: location.href, text: (document.body?.innerText ?? "").slice(0, 6000) }))
+      .catch(() => null);
+    if (snap && SUBMITTED_TEXT.test(snap.text)) {
+      await pushStep(applicationId, "You completed it — submission confirmed", "done");
+      const finalized = await finalizeCloudSubmission(applicationId, app.userId);
+      if (finalized) {
+        const client = new Steel({ steelAPIKey: apiKey });
+        await client.sessions.release(app.submissionSessionId).catch(() => {});
+      }
+      confirmed = true;
+    }
+  } catch (err) {
+    console.warn(`[takeover] app ${applicationId} check failed: ${String(err).slice(0, 120)}`);
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+
+  // Keep watching until confirmed, the session is gone, or we hit the cap.
+  if (!confirmed && !sessionGone && attempt + 1 < MAX_TAKEOVER_ATTEMPTS) {
+    await enqueueConfirmTakeover({ applicationId, attempt: attempt + 1 }).catch(() => null);
   }
 }

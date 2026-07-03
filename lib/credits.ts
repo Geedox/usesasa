@@ -124,6 +124,16 @@ export async function chargeForOnboarding(userId: string): Promise<number> {
   return after;
 }
 
+// Debit 1 credit for a manual "Find more" scan. Refuses below 0. Returns the new
+// balance, or null if the user has no credits (so a scan can't run for free).
+export async function chargeForDiscovery(userId: string): Promise<number | null> {
+  const balance = await getBalance(userId);
+  if (balance < 1) return null;
+  const after = balance - 1;
+  await db.insert(creditLedger).values({ userId, delta: -1, reason: "discovery_charge", balanceAfter: after });
+  return after;
+}
+
 // Debit 1 credit for a successful submission. Refuses below 0. Returns the new balance, or null if no credits.
 export async function chargeForSubmission(userId: string, applicationId: string): Promise<number | null> {
   const balance = await getBalance(userId);

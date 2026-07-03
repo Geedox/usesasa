@@ -52,6 +52,24 @@ export function ApplicationReview({
   const [code, setCode] = useState("");
   const [submittingCode, setSubmittingCode] = useState(false);
   const [codeMsg, setCodeMsg] = useState("");
+  const [retrying, setRetrying] = useState(false);
+
+  // The Steel live session is short-lived. If the user comes back after it has
+  // expired, re-approving opens a FRESH cloud browser and re-fills the form, so they
+  // can finish. Nothing was charged for the paused attempt; the credit is only taken
+  // when a submission actually completes.
+  const retryInFreshBrowser = async () => {
+    setRetrying(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/approve`, { method: "POST" });
+      if (!res.ok) throw new Error("Could not restart the submission.");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setRetrying(false);
+    }
+  };
 
   const submitCode = async () => {
     setSubmittingCode(true);
@@ -175,7 +193,7 @@ export function ApplicationReview({
         <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 mb-8">
           <div className="font-medium text-blue-900 mb-1">Enter the code from your email</div>
           <p className="text-sm text-blue-900/80 mb-3">{submissionNote || "This employer emailed you a verification code to finish the application."}</p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -192,6 +210,17 @@ export function ApplicationReview({
               <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
             </div>
           )}
+          <p className="text-sm text-blue-900/80 mt-3">
+            If the browser above says the session expired, start a fresh one and we will re-fill it for you.
+          </p>
+          <Button
+            onClick={retryInFreshBrowser}
+            disabled={retrying}
+            variant="outline"
+            className="mt-2 h-10 px-5 rounded-lg border-blue-300 text-blue-800 hover:bg-blue-100 cursor-pointer"
+          >
+            {retrying ? "Starting…" : "Start a fresh browser"}
+          </Button>
         </div>
       )}
 
@@ -201,13 +230,21 @@ export function ApplicationReview({
             <AlertTriangle className="w-4 h-4" /> Could not finish submitting
           </div>
           <p className="text-sm text-amber-800">
-            {submissionNote}. {submissionViewUrl ? "Finish it in the live browser below, or edit and approve to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
+            {submissionNote}. {submissionViewUrl ? "Finish it in the live browser below, or start a fresh one to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
           </p>
           {submissionViewUrl && (
             <div className="mt-4 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
               <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
             </div>
           )}
+          <Button
+            onClick={retryInFreshBrowser}
+            disabled={retrying}
+            variant="outline"
+            className="mt-3 h-10 px-5 rounded-lg border-amber-300 text-amber-800 hover:bg-amber-100 cursor-pointer"
+          >
+            {retrying ? "Starting…" : "Start a fresh browser & retry"}
+          </Button>
         </div>
       )}
 

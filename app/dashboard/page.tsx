@@ -4,11 +4,11 @@ import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications, users } from "@/lib/db/schema";
 import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
+import { stripHtml } from "@/lib/ats/util";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
-import { CompanyAvatar } from "@/components/dashboard/company-avatar";
 import { DiscoverButton } from "@/components/dashboard/discover-button";
 import { AddYourOwn } from "@/components/dashboard/add-your-own";
-import { ApplyButton } from "@/components/dashboard/apply-button";
+import { MatchCard } from "@/components/dashboard/match-card";
 import { ScanningMatches } from "@/components/dashboard/scanning-matches";
 import { ExtensionModal } from "@/components/dashboard/extension-modal";
 import { ApplicationsTable } from "@/components/dashboard/applications-table";
@@ -29,65 +29,23 @@ function timeAgo(date: Date | null): string {
   return months === 1 ? "1 month ago" : `${months} months ago`;
 }
 
-// Map an application's state to a status pill shown on a match card, so a job we are
-// already working on shows its real state instead of resetting to "Apply" on refresh.
-function matchStatus(state: string | null): { label: string; cls: string } | null {
-  switch (state) {
-    case "drafted":
-      return { label: "Drafting…", cls: "bg-amber-100 text-amber-700" };
-    case "awaiting_review":
-      return { label: "Review", cls: "bg-sky-100 text-sky-700" };
-    case "queued":
-      return { label: "Queued", cls: "bg-sky-100 text-sky-700" };
-    case "sending":
-      return { label: "Sending…", cls: "bg-amber-100 text-amber-700" };
-    case "submitted":
-      return { label: "Applied", cls: "bg-emerald-100 text-emerald-700" };
-    case "needs_user":
-      return { label: "Needs you", cls: "bg-rose-100 text-rose-700" };
-    case "failed":
-      return { label: "Failed", cls: "bg-rose-100 text-rose-700" };
-    default:
-      return null; // no application yet, or dismissed → show Apply
-  }
+// Clean a raw job description for display in the drawer: strip HTML, remove links and
+// emails (the user asked for "no links or anything"), and tidy whitespace.
+function cleanJd(raw: string | null): string {
+  if (!raw) return "";
+  let t = stripHtml(raw);
+  t = t.replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.\S+/gi, "").replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "");
+  t = t.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return t.slice(0, 8000);
 }
-
-function MatchRing({ value }: { value: number }) {
-  const r = 20;
-  const c = 2 * Math.PI * r;
-  const dash = (Math.min(Math.max(value, 0), 100) / 100) * c;
-  return (
-    <div className="relative w-12 h-12 shrink-0">
-      <svg viewBox="0 0 48 48" className="w-12 h-12 -rotate-90">
-        <circle cx="24" cy="24" r={r} fill="none" strokeWidth="3" stroke="currentColor" className="text-foreground/10" />
-        <circle
-          cx="24"
-          cy="24"
-          r={r}
-          fill="none"
-          strokeWidth="3"
-          strokeLinecap="round"
-          stroke="currentColor"
-          className="text-foreground"
-          strokeDasharray={`${dash} ${c}`}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xs font-medium leading-none">{value}%</span>
-        <span className="font-mono text-[7px] tracking-widest text-muted-foreground uppercase mt-0.5">match</span>
-      </div>
-    </div>
-  );
-}
-
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; loc?: string; lvl?: string; work?: string; sponsor?: string }>;
+  searchParams: Promise<{ q?: string; loc?: string; lvl?: string; work?: string; sponsor?: string; view?: string }>;
 }) {
   const session = await getSession();
-  const { q, loc: locParam, lvl: lvlParam, work: workParam, sponsor: sponsorParam } = await searchParams;
+  const { q, loc: locParam, lvl: lvlParam, work: workParam, sponsor: sponsorParam, view } = await searchParams;
   const query = (q ?? "").trim();
   const loc = (locParam ?? "").trim();
   const lvl = SENIORITY.find((s) => s.key === lvlParam)?.key ?? "";
@@ -105,6 +63,7 @@ export default async function DashboardPage({
           location: jobs.location,
           remotePolicy: jobs.remotePolicy,
           postedAt: jobs.postedAt,
+          rawJd: jobs.rawJd,
           company: companies.name,
           logoUrl: companies.logoUrl,
           score: matchesTable.score,
@@ -160,6 +119,20 @@ export default async function DashboardPage({
     appliedAt: (a.submittedAt ?? a.createdAt)?.toISOString() ?? null,
   }));
 
+  const matchCards = rows.map((m) => ({
+    id: m.id,
+    title: m.title,
+    location: m.location ?? "",
+    remotePolicy: m.remotePolicy,
+    postedAgo: timeAgo(m.postedAt),
+    company: m.company,
+    logoUrl: m.logoUrl,
+    score: m.score,
+    reason: (m.reasons as { reason?: string } | null)?.reason ?? "",
+    appState: m.appState,
+    description: cleanJd(m.rawJd),
+  }));
+
   const userRow = session
     ? await db.query.users.findFirst({ where: eq(users.id, session.user.id) })
     : null;
@@ -188,6 +161,7 @@ export default async function DashboardPage({
       </div>
 
       <DashboardTabs
+        initialTab={view === "apps" ? "apps" : "matches"}
         matchCount={rows.length}
         appCount={applicationRows.length}
         matches={
@@ -214,38 +188,8 @@ export default async function DashboardPage({
         <ScanningMatches />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mb-12">
-          {rows.map((m) => (
-            <div key={m.id} className="rounded-xl border border-foreground/10 bg-background p-5 flex flex-col">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <div className="text-xs text-muted-foreground">{m.location || (m.remotePolicy === "remote" ? "Remote" : "")}</div>
-                  <div className="text-xs text-muted-foreground">{timeAgo(m.postedAt)}</div>
-                </div>
-                <MatchRing value={m.score} />
-              </div>
-              <h3 className="font-display text-xl tracking-tight mb-3 leading-snug">{m.title}</h3>
-              <p className="text-sm text-muted-foreground mb-5 line-clamp-3">{(m.reasons as { reason?: string } | null)?.reason}</p>
-              <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-                <span className="flex items-center gap-2 min-w-0">
-                  <CompanyAvatar name={m.company} logoUrl={m.logoUrl} size={28} />
-                  <span className="text-sm font-medium truncate">{m.company}</span>
-                </span>
-                <div className="flex items-center gap-2 shrink-0">
-                  {matchStatus(m.appState) ? (
-                    <span className={`rounded-lg px-3 py-1.5 text-sm font-medium ${matchStatus(m.appState)!.cls}`}>
-                      {matchStatus(m.appState)!.label}
-                    </span>
-                  ) : (
-                    <>
-                      <button className="rounded-lg border border-foreground/15 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 cursor-pointer">
-                        Pass
-                      </button>
-                      <ApplyButton jobId={m.id} />
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+          {matchCards.map((card) => (
+            <MatchCard key={card.id} card={card} />
           ))}
         </div>
       )}
