@@ -178,6 +178,10 @@ export const preferences = pgTable("preferences", {
   targetRoles: text("target_roles").array(),
   seniority: text("seniority"),
   targetLocations: text("target_locations").array(),
+  // Preferred work arrangements (subset of remote/hybrid/onsite); empty/null = any.
+  workArrangements: text("work_arrangements").array(),
+  // Student/experience mode: only surface internships when true.
+  internshipOnly: boolean("internship_only").notNull().default(false),
   salaryMinUsd: integer("salary_min_usd"),
   needsSponsorship: boolean("needs_sponsorship"),
   sponsorshipCountries: text("sponsorship_countries").array(),
@@ -321,6 +325,16 @@ export const paystackTransactions = pgTable("paystack_transactions", {
   rawWebhook: jsonb("raw_webhook"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---- Anthropic token usage (per call), for the admin spend dashboard ----
+export const anthropicUsage = pgTable("anthropic_usage", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tag: text("tag").notNull(), // feature that made the call, e.g. "tailor.generate"
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("anthropic_usage_created_idx").on(t.createdAt), index("anthropic_usage_tag_idx").on(t.tag)]);
 
 // ---- WhatsApp message log ----
 export const whatsappMessages = pgTable("whatsapp_messages", {

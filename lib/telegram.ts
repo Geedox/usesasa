@@ -6,6 +6,7 @@ import { SITE_URL } from "@/lib/site";
 import { enqueueTailorApplication, enqueueSubmitApplication } from "@/lib/queue";
 import { generateResumePdf } from "@/lib/resume-pdf";
 import { canUseSasa } from "@/lib/can-use";
+import { searchRolesForUser } from "@/lib/matching/query";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const API = (method: string) => `https://api.telegram.org/bot${TOKEN}/${method}`;
@@ -287,8 +288,66 @@ async function handleStart(chatId: number, token: string): Promise<void> {
     .where(eq(users.id, user.id));
   await sendMessage(
     String(chatId),
-    "Connected. I will message you here when an application is tailored and ready to review.",
+    "Connected. Ask me for roles any time, for example:\n" +
+      "• remote backend roles\n" +
+      "• visa sponsorship jobs in Europe\n" +
+      "• product internships in Lagos\n\n" +
+      "I will reply with your best matches and their percentages. I will also message you when an application you approved is ready to review.",
   );
+}
+
+// Short help / usage text.
+async function sendHelp(chatId: number | string): Promise<void> {
+  await sendMessage(
+    String(chatId),
+    "Tell me what you are looking for and I will find your best matches, for example:\n" +
+      "• remote backend roles\n" +
+      "• visa sponsorship jobs in Europe\n" +
+      "• data internships in Lagos\n" +
+      "• senior product roles\n\n" +
+      "For each match I show the fit percentage and a button to tailor your CV and apply.",
+  );
+}
+
+// On-demand role search: the user asks in plain language, the agent finds their top
+// matches and replies with each one (fit % + an Apply button). This replaces the old
+// behaviour where the bot pushed roles on its own.
+async function handleRoleQuery(chatId: number | string, text: string): Promise<void> {
+  const user = await db.query.users.findFirst({ where: eq(users.telegramChatId, String(chatId)) });
+  if (!user) {
+    await sendMessage(String(chatId), "Connect your Telegram from Sasa settings first, then ask me for roles.");
+    return;
+  }
+
+  await sendMessage(String(chatId), "On it. Finding your best matches…");
+  let results;
+  try {
+    results = await searchRolesForUser(user.id, text);
+  } catch (e) {
+    console.error("[telegram] role query failed:", e);
+    await sendMessage(String(chatId), "Something went wrong finding roles. Please try again in a moment.");
+    return;
+  }
+
+  if (!results.length) {
+    await sendMessage(
+      String(chatId),
+      "I could not find matching roles for that yet. Try another area or role, or give the next scan a little time to gather fresh jobs. You can also browse everything on your dashboard.",
+    );
+    return;
+  }
+
+  await sendMessage(String(chatId), `Here are your top ${results.length} matches for that:`);
+  for (const r of results) {
+    await notifyNewMatch({
+      chatId: String(chatId),
+      jobId: r.jobId,
+      company: r.company,
+      title: r.title,
+      score: r.score,
+      reason: r.reason,
+    });
+  }
 }
 
 async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Promise<void> {
@@ -381,9 +440,18 @@ async function handleCallback(cb: NonNullable<TgUpdate["callback_query"]>): Prom
 
 async function processUpdate(u: TgUpdate): Promise<void> {
   if (u.message?.text) {
-    const m = u.message.text.match(/^\/start\s+(\S+)/);
-    if (m) { await handleStart(u.message.chat.id, m[1]); return; }
-    if (!u.message.text.startsWith("/")) await handleCodeReply(u.message.chat.id, u.message.text.trim());
+    const text = u.message.text.trim();
+    const chatId = u.message.chat.id;
+
+    const startMatch = text.match(/^\/start\s+(\S+)/);
+    if (startMatch) { await handleStart(chatId, startMatch[1]); return; }
+    if (text === "/start" || text === "/help") { await sendHelp(chatId); return; }
+    if (text.startsWith("/")) { await sendHelp(chatId); return; } // unknown command
+
+    // If an application is paused waiting for an emailed code, a code-like reply is
+    // the code. Otherwise, treat the message as a natural-language role search.
+    if (await handleCodeReply(chatId, text)) return;
+    await handleRoleQuery(chatId, text);
   } else if (u.callback_query) {
     await handleCallback(u.callback_query);
   }
@@ -391,20 +459,24 @@ async function processUpdate(u: TgUpdate): Promise<void> {
 
 // A plain text reply is treated as the verification code for the user's most
 // recent application paused awaiting a code.
-async function handleCodeReply(chatId: number | string, text: string): Promise<void> {
-  if (!/^[A-Za-z0-9\-]{3,12}$/.test(text)) return; // looks like a code, not chatter
+// Try to treat a message as the verification code for an application paused awaiting
+// one. Returns true if it was consumed as a code (so the caller stops), false to let
+// the message fall through to the role search.
+async function handleCodeReply(chatId: number | string, text: string): Promise<boolean> {
+  if (!/^[A-Za-z0-9\-]{3,12}$/.test(text)) return false; // has spaces/too long — not a code
   const user = await db.query.users.findFirst({ where: eq(users.telegramChatId, String(chatId)) });
-  if (!user) return;
+  if (!user) return false;
   const app = await db.query.applications.findFirst({
     where: and(eq(applications.userId, user.id), eq(applications.awaitingCode, true)),
     orderBy: (a, { desc }) => [desc(a.createdAt)],
   });
-  if (!app) return;
+  if (!app) return false; // nothing waiting on a code — treat as a role query instead
   await sendMessage(String(chatId), "Got it. Entering the code and finishing the application now…");
   const { resumeWithCode } = await import("@/lib/submit/steel");
   const r = await resumeWithCode(app.id, text);
   if (r.result === "submitted") await sendMessage(String(chatId), "Done. Your application was submitted.");
   else await sendMessage(String(chatId), `That did not complete it: ${escapeHtml(r.reason ?? "unknown")}. You can open the dashboard to finish it.`);
+  return true;
 }
 
 // Long-poll getUpdates forever. Runs in the worker; no public webhook needed.

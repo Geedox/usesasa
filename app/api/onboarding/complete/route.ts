@@ -35,12 +35,15 @@ export async function POST(req: Request) {
   // Map a couple of fields onto first-class preference columns for the matcher.
   const elig = (onboarding as { workEligibility?: { needsSponsorship?: boolean; sponsorshipCountries?: string[] } })
     .workEligibility;
+  const wp = (onboarding as { workPrefs?: { arrangements?: string[]; internshipOnly?: boolean } }).workPrefs;
 
   const row = {
     userId,
     onboarding,
     needsSponsorship: elig?.needsSponsorship ?? null,
     sponsorshipCountries: elig?.sponsorshipCountries ?? null,
+    workArrangements: wp?.arrangements?.length ? wp.arrangements : null,
+    internshipOnly: wp?.internshipOnly ?? false,
     ...(applicationPasswordEnc ? { applicationPasswordEnc } : {}),
   };
 

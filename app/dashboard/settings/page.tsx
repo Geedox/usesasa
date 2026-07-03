@@ -86,6 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <SettingsLayout
       apply={apply}
       comp={comp}
+      workPrefs={{ arrangements: prefs?.workArrangements ?? [], internshipOnly: prefs?.internshipOnly ?? false }}
       extensionConnected={Boolean(user?.extensionTokenHash)}
       telegramConnected={Boolean(user?.telegramChatId)}
       email={user?.email ?? session.user.email ?? ""}

@@ -14,6 +14,7 @@ type WizardData = {
   location: { address: string; city: string; postalCode: string; district: string; country: string; state: string };
   contact: { phone: string; linkedin: string; github: string; portfolio: string };
   workEligibility: { authorizedCountries: string[]; needsSponsorship: boolean; sponsorshipCountries: string[] };
+  workPrefs: { arrangements: string[]; internshipOnly: boolean };
   comp: { salaryExpectation: string; salaryCurrency: string; salaryPeriod: string; noticePeriod: string; yearsExperience: string };
   checklist: {
     openToInPerson: boolean; willingToRelocate: boolean; canStartImmediately: boolean;
@@ -32,6 +33,7 @@ const initialData: WizardData = {
   location: { address: "", city: "", postalCode: "", district: "", country: "", state: "" },
   contact: { phone: "", linkedin: "", github: "", portfolio: "" },
   workEligibility: { authorizedCountries: [], needsSponsorship: false, sponsorshipCountries: [] },
+  workPrefs: { arrangements: [], internshipOnly: false },
   comp: { salaryExpectation: "", salaryCurrency: "NGN", salaryPeriod: "year", noticePeriod: "", yearsExperience: "" },
   checklist: {
     openToInPerson: true, willingToRelocate: false, canStartImmediately: true, reliableTransport: true,
@@ -54,6 +56,7 @@ function withDefaults(saved?: SavedData | null): WizardData {
     location: { ...initialData.location, ...(saved.location ?? {}) },
     contact: { ...initialData.contact, ...(saved.contact ?? {}) },
     workEligibility: { ...initialData.workEligibility, ...(saved.workEligibility ?? {}) },
+    workPrefs: { ...initialData.workPrefs, ...(saved.workPrefs ?? {}) },
     comp: { ...initialData.comp, ...(saved.comp ?? {}) },
     checklist: { ...initialData.checklist, ...(saved.checklist ?? {}) },
     applicationPassword: "", // never restored from the server (stored encrypted)
@@ -65,9 +68,17 @@ const STEPS = [
   { eyebrow: "Location", title: "Where do you live?" },
   { eyebrow: "Contact", title: "How should we reach out?" },
   { eyebrow: "Work eligibility", title: "Where can you work?" },
+  { eyebrow: "Work preferences", title: "What kind of roles do you want?" },
   { eyebrow: "Quick checklist", title: "A few last questions." },
   { eyebrow: "Application password", title: "Set a password for sites that ask" },
   { eyebrow: "Application settings", title: "How should we apply?" },
+  { eyebrow: "Telegram", title: "Search jobs from your chat" },
+];
+
+const ARRANGEMENTS: { v: string; label: string; desc: string }[] = [
+  { v: "remote", label: "Remote", desc: "Work from anywhere" },
+  { v: "hybrid", label: "Hybrid", desc: "Mix of home and office" },
+  { v: "onsite", label: "Onsite", desc: "In the office" },
 ];
 
 const COUNTRIES = [
@@ -500,8 +511,59 @@ export function OnboardingWizard({
               </div>
             )}
 
-            {/* STEP 4 — Quick checklist */}
+            {/* STEP 4 — Work preferences */}
             {step === 3 && (
+              <div className="max-w-3xl">
+                <p className="text-muted-foreground mb-8">
+                  This shapes what the agent looks for. Pick everything that fits, or skip to see all roles.
+                </p>
+
+                <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase mb-3">
+                  Work arrangement
+                </p>
+                <div className="grid sm:grid-cols-3 gap-3 mb-8">
+                  {ARRANGEMENTS.map((a) => (
+                    <Chip
+                      key={a.v}
+                      active={data.workPrefs.arrangements.includes(a.v)}
+                      onClick={() => set("workPrefs", { ...data.workPrefs, arrangements: toggleIn(data.workPrefs.arrangements, a.v) })}
+                    >
+                      <span className="block font-medium">{a.label}</span>
+                      <span className="block text-xs opacity-70">{a.desc}</span>
+                    </Chip>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mb-8">Leave all unselected to include every arrangement.</p>
+
+                <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase mb-3">
+                  Employment type
+                </p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Chip
+                    active={!data.workPrefs.internshipOnly}
+                    onClick={() => set("workPrefs", { ...data.workPrefs, internshipOnly: false })}
+                  >
+                    <span className="block font-medium">Open to all roles</span>
+                    <span className="block text-xs opacity-70">Full time, contract, and internships</span>
+                  </Chip>
+                  <Chip
+                    active={data.workPrefs.internshipOnly}
+                    onClick={() => set("workPrefs", { ...data.workPrefs, internshipOnly: true })}
+                  >
+                    <span className="block font-medium">Internships only</span>
+                    <span className="block text-xs opacity-70">Great if you are after experience</span>
+                  </Chip>
+                </div>
+                {data.workPrefs.internshipOnly && (
+                  <p className="text-sm text-muted-foreground mt-4 rounded-lg bg-foreground/[0.03] p-4">
+                    The agent will only find and apply to internships for you, on the dashboard and in Telegram.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* STEP 5 — Quick checklist */}
+            {step === 4 && (
               <div className="max-w-3xl">
                 <p className="text-muted-foreground mb-8">
                   Tap through. Defaults work for most people, only change what applies.
@@ -581,8 +643,8 @@ export function OnboardingWizard({
               </div>
             )}
 
-            {/* STEP 5 — Application password */}
-            {step === 4 && (
+            {/* STEP 6 — Application password */}
+            {step === 5 && (
               <div className="max-w-2xl">
                 <p className="text-muted-foreground mb-6">
                   Some applications (Workday, iCIMS, Oracle) make you create an account mid-flow. We use this to sign you up automatically.
@@ -624,8 +686,8 @@ export function OnboardingWizard({
               </div>
             )}
 
-            {/* STEP 6 — Application settings */}
-            {step === 5 && (
+            {/* STEP 7 — Application settings */}
+            {step === 6 && (
               <div className="max-w-3xl">
                 <p className="text-muted-foreground mb-8">You can change these anytime from settings.</p>
                 <div className="rounded-xl border border-foreground/10 overflow-hidden mb-6">
@@ -666,6 +728,56 @@ export function OnboardingWizard({
                         the offer. You stay responsible for what you submit.
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 8 — Telegram info */}
+            {step === 7 && (
+              <div className="max-w-2xl">
+                <p className="text-muted-foreground mb-8">
+                  Sasa has a Telegram bot so you can search and apply to jobs right from your chat. It is optional, and
+                  you turn it on after setup.
+                </p>
+
+                <div className="rounded-xl border border-foreground/10 overflow-hidden mb-6">
+                  <div className="bg-foreground/[0.03] px-5 py-2 font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
+                    How to turn it on
+                  </div>
+                  <ol className="px-5 py-4 space-y-3 text-sm">
+                    <li className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-xs">1</span>
+                      <span>Finish setup, then open <span className="font-medium">Settings</span> in your dashboard.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-xs">2</span>
+                      <span>Under <span className="font-medium">Telegram</span>, tap Connect. It opens the bot and links your account.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background text-xs">3</span>
+                      <span>Send the bot a message telling it what you want.</span>
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="rounded-xl border border-foreground/10 overflow-hidden">
+                  <div className="bg-foreground/[0.03] px-5 py-2 font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
+                    What you can type
+                  </div>
+                  <div className="px-5 py-4 flex flex-col gap-2 text-sm">
+                    {[
+                      "remote backend roles",
+                      "visa sponsorship jobs in Europe",
+                      "product internships in Lagos",
+                      "senior data roles",
+                    ].map((ex) => (
+                      <span key={ex} className="rounded-lg bg-foreground/[0.04] px-3 py-2 font-mono text-xs">“{ex}”</span>
+                    ))}
+                    <p className="text-muted-foreground mt-2">
+                      The agent replies with your best matches and their fit percentage, each with a button to tailor
+                      your CV and apply. It only messages you when you ask, or when an application you approved is ready.
+                    </p>
                   </div>
                 </div>
               </div>

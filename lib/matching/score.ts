@@ -1,10 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { and, desc, eq, gte, isNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, gte, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { jobs, matches, profiles, preferences, applications, users, companies } from "@/lib/db/schema";
+import { jobs, matches, profiles, preferences, applications, users } from "@/lib/db/schema";
 import { normalizeProfile, type Profile } from "@/lib/profile";
 import { enqueueTailorApplication } from "@/lib/queue";
-import { notifyNewMatch } from "@/lib/telegram";
 import { logUsage } from "@/lib/anthropic-usage";
 
 const MAX_CANDIDATES = 300; // jobs scored per run (batched, so ~30 LLM calls)
@@ -15,7 +14,6 @@ export const MATCH_THRESHOLD = 60; // surface + auto-tailor at/above this score
 // by default; set AUTO_TAILOR_LIMIT=0 to disable entirely (matches still surface, and
 // the user tailors on demand from the dashboard).
 const AUTO_TAILOR_LIMIT = Math.max(0, Number(process.env.AUTO_TAILOR_LIMIT ?? 3));
-const NUDGE_PER_RUN = 15; // top new matches asked about on Telegram per run
 
 const STOPWORDS = new Set([
   "with", "team", "lead", "senior", "junior", "staff", "and", "the", "for",
@@ -45,7 +43,14 @@ function prefilter(keywords: string[], job: { title: string; rawJd: string }): b
 
 type ScoreResult = { score: number; reason: string };
 
-function profileBlurb(p: Profile, prefs?: { targetRoles?: string[] | null; seniority?: string | null }): string {
+type BlurbPrefs = {
+  targetRoles?: string[] | null;
+  seniority?: string | null;
+  arrangements?: string[] | null;
+  internshipOnly?: boolean | null;
+};
+
+function profileBlurb(p: Profile, prefs?: BlurbPrefs): string {
   const lines = [
     p.summary,
     `Recent roles: ${p.experience.slice(0, 4).map((e) => `${e.title} at ${e.company}`).join("; ")}`,
@@ -53,7 +58,15 @@ function profileBlurb(p: Profile, prefs?: { targetRoles?: string[] | null; senio
   ];
   if (prefs?.targetRoles?.length) lines.push(`Target roles the candidate wants: ${prefs.targetRoles.join(", ")}`);
   if (prefs?.seniority) lines.push(`Seniority: ${prefs.seniority}`);
+  if (prefs?.arrangements?.length) lines.push(`Preferred work arrangement: ${prefs.arrangements.join(", ")}`);
+  if (prefs?.internshipOnly) lines.push(`Only interested in internships (score non-internship roles below 35).`);
   return lines.filter(Boolean).join("\n");
+}
+
+// A student who wants experience can ask for internships only. Title-based, which is
+// how ATS boards label them.
+function isInternship(title: string): boolean {
+  return /\bintern(ship)?s?\b|\btrainee\b/i.test(title);
 }
 
 // Score a batch of jobs in one Haiku call. Returns one result per input job,
@@ -145,6 +158,57 @@ export async function scoreJobForUser(
   return result ?? null;
 }
 
+// Score a specific set of candidate jobs for a user on demand (used by the Telegram
+// search when the user's stored matches are thin for their query). Writes matches
+// (cached, so a repeat of the same query won't re-score them) and returns results.
+// Bounded by the caller; the caller gates this on credits so it can't be abused.
+export async function scoreJobsForUser(
+  userId: string,
+  candidates: { id: string; title: string; location: string | null; rawJd: string | null }[],
+): Promise<{ jobId: string; score: number; reason: string }[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || candidates.length === 0) return [];
+
+  const profileRow = await db.query.profiles.findFirst({
+    where: and(eq(profiles.userId, userId), eq(profiles.isCurrent, true)),
+  });
+  if (!profileRow?.parsedData) return [];
+  const profile = normalizeProfile(profileRow.parsedData);
+
+  const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
+  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const blurb = profileBlurb(profile, {
+    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
+    seniority: prefs?.seniority ?? null,
+    arrangements: prefs?.workArrangements ?? null,
+    internshipOnly: prefs?.internshipOnly ?? null,
+  });
+
+  const anthropic = new Anthropic({ apiKey });
+  const out: { jobId: string; score: number; reason: string }[] = [];
+  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    const batch = candidates.slice(i, i + BATCH_SIZE);
+    try {
+      const results = await scoreBatch(
+        anthropic,
+        blurb,
+        batch.map((j) => ({ title: j.title, location: j.location ?? "", rawJd: j.rawJd ?? "" })),
+      );
+      for (let k = 0; k < batch.length; k++) {
+        const { score, reason } = results[k];
+        await db
+          .insert(matches)
+          .values({ userId, jobId: batch[k].id, profileVersion: profileRow.version, score, reasons: { reason }, userAction: "pending" })
+          .onConflictDoNothing({ target: [matches.userId, matches.jobId] });
+        out.push({ jobId: batch[k].id, score, reason });
+      }
+    } catch (err) {
+      console.error("[score] on-demand batch failed:", err);
+    }
+  }
+  return out;
+}
+
 // Score un-scored candidate jobs for a user and write matches (cached: pairs
 // already in `matches` are skipped, so re-runs don't re-call the LLM).
 export async function scoreUser(userId: string): Promise<{ scored: number }> {
@@ -160,9 +224,12 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   // Use the candidate's onboarding target roles + seniority alongside the CV.
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
   const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const internshipOnly = !!prefs?.internshipOnly;
   const prefsForBlurb = {
     targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
     seniority: prefs?.seniority ?? null,
+    arrangements: prefs?.workArrangements ?? null,
+    internshipOnly,
   };
 
   const allJobs = await db.query.jobs.findMany({ where: eq(jobs.isActive, true) });
@@ -177,6 +244,8 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   const keywords = roleKeywords(profile);
   const candidates = allJobs
     .filter((j) => !seen.has(j.id))
+    // Internships-only students never get non-internships surfaced.
+    .filter((j) => !internshipOnly || isInternship(j.title))
     .filter((j) => prefilter(keywords, { title: j.title, rawJd: j.rawJd ?? "" }))
     .sort((a, b) => (b.postedAt?.getTime() ?? 0) - (a.postedAt?.getTime() ?? 0))
     .slice(0, MAX_CANDIDATES);
@@ -222,57 +291,14 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   return { scored };
 }
 
-// Decide how to surface new matches based on whether the user linked Telegram.
+// Decide how to surface new matches. Telegram users pull roles on demand (they ask
+// the bot "find me X roles"), so nothing is pushed to them — the bot stays quiet
+// until asked. Users without Telegram get their top matches auto-prepared on the
+// dashboard so drafts are ready to review.
 async function surfaceNewMatches(userId: string): Promise<number> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (user?.telegramChatId) return nudgeNewMatches(userId, user.telegramChatId);
+  if (user?.telegramChatId) return 0;
   return autoTailorTopMatches(userId);
-}
-
-// Gate 1: ask on Telegram about the top new matches (not yet nudged, not applied).
-async function nudgeNewMatches(userId: string, chatId: string): Promise<number> {
-  const applied = await db
-    .select({ jobId: applications.jobId })
-    .from(applications)
-    .where(eq(applications.userId, userId));
-  const appliedJobIds = applied.map((a) => a.jobId);
-
-  const rows = await db
-    .select({
-      matchId: matches.id,
-      jobId: matches.jobId,
-      score: matches.score,
-      reasons: matches.reasons,
-      title: jobs.title,
-      company: companies.name,
-    })
-    .from(matches)
-    .innerJoin(jobs, eq(matches.jobId, jobs.id))
-    .innerJoin(companies, eq(jobs.companyId, companies.id))
-    .where(
-      and(
-        eq(matches.userId, userId),
-        eq(matches.userAction, "pending"),
-        isNull(matches.nudgedAt),
-        gte(matches.score, MATCH_THRESHOLD),
-        appliedJobIds.length ? notInArray(matches.jobId, appliedJobIds) : undefined,
-      ),
-    )
-    .orderBy(desc(matches.score))
-    .limit(NUDGE_PER_RUN);
-
-  for (const r of rows) {
-    await notifyNewMatch({
-      chatId,
-      jobId: r.jobId,
-      company: r.company,
-      title: r.title,
-      score: r.score,
-      reason: (r.reasons as { reason?: string } | null)?.reason,
-    });
-    await db.update(matches).set({ nudgedAt: new Date() }).where(eq(matches.id, r.matchId));
-  }
-  return rows.length;
 }
 
 // Create draft applications + enqueue tailoring for the user's top matches that
