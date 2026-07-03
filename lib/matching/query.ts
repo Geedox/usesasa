@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { and, or, eq, gte, ilike, desc, type SQL } from "drizzle-orm";
+import { and, or, eq, gte, ilike, desc, notInArray, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { jobs, matches, companies } from "@/lib/db/schema";
 import { logUsage } from "@/lib/anthropic-usage";
+import { scoreJobsForUser } from "@/lib/matching/score";
+import { canUseSasa } from "@/lib/can-use";
 
 // A single role returned by an on-demand search (Telegram "find me X roles").
 export type RoleResult = {
@@ -86,35 +88,44 @@ Request: "${q}"`,
   }
 }
 
-// Search the user's already-scored matches, filtered by what they asked for, ranked
-// by match score. Read-only + free: it queries the matches the daily cycle produced,
-// so no scoring cost is incurred per request.
-export async function searchRolesForUser(userId: string, query: string, limit = 6): Promise<RoleResult[]> {
-  const intent = await parseIntent(query);
-
-  const conds: SQL[] = [eq(matches.userId, userId), eq(jobs.isActive, true), gte(matches.score, 40)];
-
+// Build the job-table filter conditions for an intent (shared by the stored-match
+// query and the on-demand fresh-scoring fallback).
+function jobFilters(intent: Intent): SQL[] {
+  const c: SQL[] = [];
   if (intent.locations.length) {
-    const loc = or(...intent.locations.map((l) => ilike(jobs.location, `%${l}%`)));
-    if (loc) conds.push(loc);
+    const x = or(...intent.locations.map((l) => ilike(jobs.location, `%${l}%`)));
+    if (x) c.push(x);
   }
   if (intent.remote) {
-    const rem = or(ilike(jobs.remotePolicy, "%remote%"), ilike(jobs.location, "%remote%"));
-    if (rem) conds.push(rem);
+    const x = or(ilike(jobs.remotePolicy, "%remote%"), ilike(jobs.location, "%remote%"));
+    if (x) c.push(x);
   }
-  if (intent.internship) {
-    conds.push(ilike(jobs.title, "%intern%"));
-  }
+  if (intent.internship) c.push(ilike(jobs.title, "%intern%"));
   if (intent.sponsorship) {
-    const sp = or(ilike(jobs.rawJd, "%sponsor%"), ilike(jobs.rawJd, "%visa%"), ilike(jobs.rawJd, "%relocat%"));
-    if (sp) conds.push(sp);
+    const x = or(ilike(jobs.rawJd, "%sponsor%"), ilike(jobs.rawJd, "%visa%"), ilike(jobs.rawJd, "%relocat%"));
+    if (x) c.push(x);
   }
   if (intent.keywords.length) {
-    const kw = or(...intent.keywords.flatMap((k) => [ilike(jobs.title, `%${k}%`), ilike(jobs.rawJd, `%${k}%`)]));
-    if (kw) conds.push(kw);
+    const x = or(...intent.keywords.flatMap((k) => [ilike(jobs.title, `%${k}%`), ilike(jobs.rawJd, `%${k}%`)]));
+    if (x) c.push(x);
   }
+  return c;
+}
 
-  const rows = await db
+const MIN_SCORE = 40; // don't surface weak fits
+const ENOUGH = 3; // stored matches at or above this count skip the fresh-scoring fallback
+const FRESH_CANDIDATES = 15; // jobs scored on demand when stored matches are thin (~2 Haiku calls)
+
+// Search the user's roles for a plain-language request, ranked by match score.
+// First checks already-scored matches (free). If those are thin AND the user has
+// credits, it scores a small batch of fresh jobs matching the query on demand, so a
+// niche request ("visa sponsorship roles in Berlin") still returns something.
+export async function searchRolesForUser(userId: string, query: string, limit = 6): Promise<RoleResult[]> {
+  const intent = await parseIntent(query);
+  const filters = jobFilters(intent);
+
+  // 1. Stored matches — free.
+  const stored = await db
     .select({
       jobId: jobs.id,
       title: jobs.title,
@@ -126,11 +137,11 @@ export async function searchRolesForUser(userId: string, query: string, limit = 
     .from(matches)
     .innerJoin(jobs, eq(matches.jobId, jobs.id))
     .innerJoin(companies, eq(jobs.companyId, companies.id))
-    .where(and(...conds))
+    .where(and(eq(matches.userId, userId), eq(jobs.isActive, true), gte(matches.score, MIN_SCORE), ...filters))
     .orderBy(desc(matches.score))
     .limit(limit);
 
-  return rows.map((r) => ({
+  const results: RoleResult[] = stored.map((r) => ({
     jobId: r.jobId,
     title: r.title,
     company: r.company,
@@ -138,4 +149,39 @@ export async function searchRolesForUser(userId: string, query: string, limit = 
     score: r.score,
     reason: (r.reasons as { reason?: string } | null)?.reason,
   }));
+
+  // Enough stored matches, or the user can't spend on scoring — return what we have.
+  if (results.length >= ENOUGH) return results;
+  if (!(await canUseSasa(userId)).ok) return results;
+
+  // 2. On-demand: score fresh jobs matching the query that aren't scored yet.
+  const scoredRows = await db.select({ jobId: matches.jobId }).from(matches).where(eq(matches.userId, userId));
+  const scoredIds = scoredRows.map((m) => m.jobId);
+
+  const fresh = await db
+    .select({ id: jobs.id, title: jobs.title, location: jobs.location, rawJd: jobs.rawJd, company: companies.name })
+    .from(jobs)
+    .innerJoin(companies, eq(jobs.companyId, companies.id))
+    .where(and(eq(jobs.isActive, true), scoredIds.length ? notInArray(jobs.id, scoredIds) : undefined, ...filters))
+    .orderBy(desc(jobs.discoveredAt))
+    .limit(FRESH_CANDIDATES);
+  if (fresh.length === 0) return results;
+
+  const scored = await scoreJobsForUser(userId, fresh.map((f) => ({ id: f.id, title: f.title, location: f.location, rawJd: f.rawJd })));
+  const scoreMap = new Map(scored.map((s) => [s.jobId, s]));
+
+  const freshResults: RoleResult[] = fresh
+    .filter((f) => (scoreMap.get(f.id)?.score ?? 0) >= MIN_SCORE)
+    .map((f) => {
+      const s = scoreMap.get(f.id)!;
+      return { jobId: f.id, title: f.title, company: f.company, location: f.location, score: s.score, reason: s.reason };
+    });
+
+  // Merge, dedupe by job, rank, cap.
+  const merged = [...results, ...freshResults];
+  const seen = new Set<string>();
+  return merged
+    .filter((r) => (seen.has(r.jobId) ? false : (seen.add(r.jobId), true)))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

@@ -143,6 +143,55 @@ export async function scoreJobForUser(
   return result ?? null;
 }
 
+// Score a specific set of candidate jobs for a user on demand (used by the Telegram
+// search when the user's stored matches are thin for their query). Writes matches
+// (cached, so a repeat of the same query won't re-score them) and returns results.
+// Bounded by the caller; the caller gates this on credits so it can't be abused.
+export async function scoreJobsForUser(
+  userId: string,
+  candidates: { id: string; title: string; location: string | null; rawJd: string | null }[],
+): Promise<{ jobId: string; score: number; reason: string }[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || candidates.length === 0) return [];
+
+  const profileRow = await db.query.profiles.findFirst({
+    where: and(eq(profiles.userId, userId), eq(profiles.isCurrent, true)),
+  });
+  if (!profileRow?.parsedData) return [];
+  const profile = normalizeProfile(profileRow.parsedData);
+
+  const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
+  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const blurb = profileBlurb(profile, {
+    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
+    seniority: prefs?.seniority ?? null,
+  });
+
+  const anthropic = new Anthropic({ apiKey });
+  const out: { jobId: string; score: number; reason: string }[] = [];
+  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    const batch = candidates.slice(i, i + BATCH_SIZE);
+    try {
+      const results = await scoreBatch(
+        anthropic,
+        blurb,
+        batch.map((j) => ({ title: j.title, location: j.location ?? "", rawJd: j.rawJd ?? "" })),
+      );
+      for (let k = 0; k < batch.length; k++) {
+        const { score, reason } = results[k];
+        await db
+          .insert(matches)
+          .values({ userId, jobId: batch[k].id, profileVersion: profileRow.version, score, reasons: { reason }, userAction: "pending" })
+          .onConflictDoNothing({ target: [matches.userId, matches.jobId] });
+        out.push({ jobId: batch[k].id, score, reason });
+      }
+    } catch (err) {
+      console.error("[score] on-demand batch failed:", err);
+    }
+  }
+  return out;
+}
+
 // Score un-scored candidate jobs for a user and write matches (cached: pairs
 // already in `matches` are skipped, so re-runs don't re-call the LLM).
 export async function scoreUser(userId: string): Promise<{ scored: number }> {
