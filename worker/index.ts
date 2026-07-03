@@ -1,11 +1,11 @@
 import "./env"; // MUST be first — loads .env.local before other imports read process.env
-import { getBoss, QUEUES, type ParseCvJob, type DiscoverCompanyJob, type DiscoverAggregatorJob, type ScoreUserJob, type TailorApplicationJob, type SubmitApplicationJob, type InterviewReminderJob, type AutoGrabCodeJob } from "../lib/queue";
+import { getBoss, QUEUES, type ParseCvJob, type DiscoverCompanyJob, type DiscoverAggregatorJob, type ScoreUserJob, type TailorApplicationJob, type SubmitApplicationJob, type InterviewReminderJob, type AutoGrabCodeJob, type ConfirmTakeoverJob } from "../lib/queue";
 import { parseCvForProfile } from "../lib/onboarding/parse";
 import { crawlCompany } from "../lib/discovery/crawl";
 import { crawlAggregator } from "../lib/discovery/crawl-aggregator";
 import { scoreUser } from "../lib/matching/score";
 import { tailorApplication } from "../lib/tailoring/tailor";
-import { processSteelSubmission } from "../lib/submit/steel";
+import { processSteelSubmission, checkTakeoverSubmission } from "../lib/submit/steel";
 import { processAutoGrabCode } from "../lib/submit/autograb";
 import { runAutonomousCycle } from "../lib/discovery/cycle";
 import { discoverYcBoards } from "../lib/discovery/yc-discovery";
@@ -84,6 +84,13 @@ async function main() {
     for (const job of jobs) {
       console.log(`[worker] auto_grab_code attempt=${job.data.attempt} app=${job.data.applicationId}`);
       await processAutoGrabCode(job.data.applicationId, job.data.attempt);
+    }
+  });
+
+  await boss.work<ConfirmTakeoverJob>(QUEUES.CONFIRM_TAKEOVER, async (jobs) => {
+    for (const job of jobs) {
+      console.log(`[worker] confirm_takeover attempt=${job.data.attempt} app=${job.data.applicationId}`);
+      await checkTakeoverSubmission(job.data.applicationId, job.data.attempt);
     }
   });
 

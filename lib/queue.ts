@@ -14,6 +14,7 @@ export const QUEUES = {
   DISCOVER_YC: "discover_yc", // cron-driven (daily): probe the YC directory + enroll new ATS boards
   INTERVIEW_REMINDER: "interview_reminder", // delayed: nudge before an interview-prep call
   AUTO_GRAB_CODE: "auto_grab_code", // delayed: pull an emailed OTP from Gmail and resume a paused submit
+  CONFIRM_TAKEOVER: "confirm_takeover", // poll a paused live session for a user-completed submission
 } as const;
 
 export type ParseCvJob = { profileId: string; cvPublicId: string };
@@ -25,6 +26,7 @@ export type SubmitApplicationJob = { applicationId: string };
 export type InterviewReminderKind = "24h" | "1h" | "10min";
 export type InterviewReminderJob = { bookingId: string; kind: InterviewReminderKind };
 export type AutoGrabCodeJob = { applicationId: string; attempt: number };
+export type ConfirmTakeoverJob = { applicationId: string; attempt: number };
 
 declare global {
   // eslint-disable-next-line no-var
@@ -47,6 +49,7 @@ async function createBoss(): Promise<PgBoss> {
   await boss.createQueue(QUEUES.DISCOVER_YC);
   await boss.createQueue(QUEUES.INTERVIEW_REMINDER);
   await boss.createQueue(QUEUES.AUTO_GRAB_CODE);
+  await boss.createQueue(QUEUES.CONFIRM_TAKEOVER);
   return boss;
 }
 
@@ -105,4 +108,12 @@ export async function enqueueInterviewReminder(data: InterviewReminderJob, start
 export async function enqueueAutoGrabCode(data: AutoGrabCodeJob, startAfterSeconds = 8): Promise<string | null> {
   const boss = await getBoss();
   return boss.send(QUEUES.AUTO_GRAB_CODE, data, { retryLimit: 0, startAfter: startAfterSeconds });
+}
+
+// Poll a paused live cloud session for a submission the user completed by hand (e.g.
+// after solving a captcha). No retries — the handler re-enqueues itself until it sees
+// the confirmation, the session expires, or it gives up.
+export async function enqueueConfirmTakeover(data: ConfirmTakeoverJob, startAfterSeconds = 20): Promise<string | null> {
+  const boss = await getBoss();
+  return boss.send(QUEUES.CONFIRM_TAKEOVER, data, { retryLimit: 0, startAfter: startAfterSeconds });
 }
