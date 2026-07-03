@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Profile } from "@/lib/profile";
 import { stripDashes } from "@/lib/sanitize";
 import { validateNoFabrication } from "@/lib/tailoring/validate";
+import { logUsage } from "@/lib/anthropic-usage";
 
 export type AnswerQuestion = { id: string; label: string; type: string; options?: string[] };
 type Job = { title: string; company: string; rawJd: string };
@@ -89,10 +90,11 @@ Rules:
 Return ONLY JSON: {"answers":[{"id":"<id>","answer":"<answer>"}]}.`;
 
   const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
     messages: [{ role: "user", content: prompt }],
   });
+  logUsage("suggest_answers", msg);
   const textPart = msg.content.find((c) => c.type === "text");
   const raw = textPart && "text" in textPart ? textPart.text : "";
   const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);

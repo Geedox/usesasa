@@ -12,8 +12,9 @@ import { discoverYcBoards } from "../lib/discovery/yc-discovery";
 import { processInterviewReminder } from "../lib/interview/reminders";
 import { startTelegramPolling } from "../lib/telegram";
 
-// Cron for the autonomous cycle. Default: every 8 hours. Override with DISCOVERY_CRON.
-const DISCOVERY_CRON = process.env.DISCOVERY_CRON || "0 */8 * * *";
+// Cron for the autonomous cycle. Default: once daily (06:00). Every-8h was 3x the
+// LLM spend for little benefit at this scale. Override with DISCOVERY_CRON.
+const DISCOVERY_CRON = process.env.DISCOVERY_CRON || "0 6 * * *";
 // YC board discovery runs daily (probing the whole directory is heavy). Override with YC_DISCOVERY_CRON.
 const YC_DISCOVERY_CRON = process.env.YC_DISCOVERY_CRON || "0 4 * * *";
 
@@ -101,10 +102,21 @@ async function main() {
     console.log(`[worker] yc discovery: scanned ${scanned}, ${hits} live boards, ${enrolled} newly enrolled`);
   });
 
-  // Register the recurring schedules (pg-boss upserts by name, so these are idempotent).
-  await boss.schedule(QUEUES.DISCOVER_TICK, DISCOVERY_CRON);
-  await boss.schedule(QUEUES.DISCOVER_YC, YC_DISCOVERY_CRON);
-  console.log(`[worker] schedules — cycle: "${DISCOVERY_CRON}", yc discovery: "${YC_DISCOVERY_CRON}"`);
+  // The autonomous cycle costs LLM tokens (scoring + auto-tailoring), so it must run
+  // on exactly ONE worker. Gate it behind RUN_DISCOVERY=1 (set on production only) so
+  // a staging worker sharing the same Anthropic key does not double the spend. The
+  // manual "Find jobs" button still works everywhere (it enqueues on demand).
+  if (process.env.RUN_DISCOVERY === "1") {
+    // Register the recurring schedules (pg-boss upserts by name, so these are idempotent).
+    await boss.schedule(QUEUES.DISCOVER_TICK, DISCOVERY_CRON);
+    await boss.schedule(QUEUES.DISCOVER_YC, YC_DISCOVERY_CRON);
+    console.log(`[worker] schedules — cycle: "${DISCOVERY_CRON}", yc discovery: "${YC_DISCOVERY_CRON}"`);
+  } else {
+    // Clear any schedule a previous RUN_DISCOVERY=1 deploy left behind on this DB.
+    await boss.unschedule(QUEUES.DISCOVER_TICK).catch(() => {});
+    await boss.unschedule(QUEUES.DISCOVER_YC).catch(() => {});
+    console.log("[worker] autonomous cycle disabled — set RUN_DISCOVERY=1 on exactly one worker to enable");
+  }
 
   // Telegram review nudges: long-poll for /start links and Approve/Skip taps.
   void startTelegramPolling();

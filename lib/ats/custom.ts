@@ -4,6 +4,7 @@
 // resulting jobs flow through the same matching + Steel-submission pipeline.
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
+import { logUsage } from "@/lib/anthropic-usage";
 import { type NormalizedJob, stripHtml, inferRemote } from "./util";
 
 function stableId(s: string): string {
@@ -87,6 +88,7 @@ LINKS (use these exact URLs):
 ${linkList}`,
     }],
   });
+  logUsage("discovery.custom_extract", msg);
   const part = msg.content.find((c) => c.type === "text");
   const raw = part && "text" in part ? part.text : "";
   try {
