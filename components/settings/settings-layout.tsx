@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { ConnectExtension } from "@/components/settings/connect-extension";
 import { ConnectTelegram } from "@/components/settings/connect-telegram";
 import { ProfileDetails, type CompDetails } from "@/components/settings/profile-details";
+import { WorkPreferences, type WorkPrefs } from "@/components/settings/work-preferences";
 import { EmailIntegrations, type EmailNotifications } from "@/components/settings/email-integrations";
 import { ReferralsPanel, type ReferralSummary } from "@/components/settings/referrals-panel";
 
@@ -46,6 +47,7 @@ async function patchSettings(patch: Partial<ApplySettings>) {
 export function SettingsLayout({
   apply: initialApply,
   comp,
+  workPrefs,
   extensionConnected,
   telegramConnected,
   email,
@@ -68,6 +70,7 @@ export function SettingsLayout({
 }: {
   apply: ApplySettings;
   comp: CompDetails;
+  workPrefs: WorkPrefs;
   extensionConnected: boolean;
   telegramConnected: boolean;
   email: string;
@@ -122,7 +125,7 @@ export function SettingsLayout({
 
         {/* Right panel */}
         <div className="min-w-0">
-          {section === "apply" && <ApplyPanel initial={initialApply} comp={comp} />}
+          {section === "apply" && <ApplyPanel initial={initialApply} comp={comp} workPrefs={workPrefs} />}
           {section === "integrations" && (
             <div className="flex flex-col gap-6">
               <ConnectExtension />
@@ -173,7 +176,7 @@ const COVER_OPTS: { value: Opt; title: string; desc: string }[] = [
   { value: "aggressive", title: "Aggressive", desc: "Rewrite to closely match the job description" },
 ];
 
-function ApplyPanel({ initial, comp }: { initial: ApplySettings; comp: CompDetails }) {
+function ApplyPanel({ initial, comp, workPrefs }: { initial: ApplySettings; comp: CompDetails; workPrefs: WorkPrefs }) {
   const [s, setS] = useState<ApplySettings>(initial);
 
   const update = (patch: Partial<ApplySettings>) => {
@@ -184,6 +187,10 @@ function ApplyPanel({ initial, comp }: { initial: ApplySettings; comp: CompDetai
   return (
     <div className="rounded-xl border border-foreground/10 bg-background p-6">
       <PanelHeader icon={SlidersHorizontal} title="Apply Settings" desc="Configure how your applications are submitted" />
+
+      <WorkPreferences initial={workPrefs} />
+
+      <div className="h-6" />
 
       <OptGroup
         title="Resume optimization"
