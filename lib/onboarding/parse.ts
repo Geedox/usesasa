@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
+import { logUsage } from "@/lib/anthropic-usage";
 import { cloudinary } from "@/lib/cloudinary";
 import { db } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
@@ -73,6 +74,7 @@ export async function parseCvForProfile(profileId: string, cvPublicId: string): 
       ],
     });
 
+    logUsage("parse_cv", msg);
     step = "json_parse";
     const textPart = msg.content.find((c) => c.type === "text");
     const raw = textPart && "text" in textPart ? textPart.text : "";

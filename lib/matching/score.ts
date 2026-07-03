@@ -5,11 +5,16 @@ import { jobs, matches, profiles, preferences, applications, users, companies } 
 import { normalizeProfile, type Profile } from "@/lib/profile";
 import { enqueueTailorApplication } from "@/lib/queue";
 import { notifyNewMatch } from "@/lib/telegram";
+import { logUsage } from "@/lib/anthropic-usage";
 
 const MAX_CANDIDATES = 300; // jobs scored per run (batched, so ~30 LLM calls)
 const BATCH_SIZE = 10; // jobs per Haiku call
 export const MATCH_THRESHOLD = 60; // surface + auto-tailor at/above this score
-const AUTO_TAILOR_LIMIT = 15; // top matches auto-prepared for review per run (no Telegram)
+// Top matches auto-prepared for review per run (users without Telegram). Each auto-
+// tailor is ~3 Haiku calls, so this is the single biggest background cost. Kept low
+// by default; set AUTO_TAILOR_LIMIT=0 to disable entirely (matches still surface, and
+// the user tailors on demand from the dashboard).
+const AUTO_TAILOR_LIMIT = Math.max(0, Number(process.env.AUTO_TAILOR_LIMIT ?? 3));
 const NUDGE_PER_RUN = 15; // top new matches asked about on Telegram per run
 
 const STOPWORDS = new Set([
@@ -90,6 +95,7 @@ ${jobList}`,
     ],
   });
 
+  logUsage("score.batch", msg);
   const textPart = msg.content.find((c) => c.type === "text");
   const raw = textPart && "text" in textPart ? textPart.text : "";
   const json = raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
@@ -272,6 +278,7 @@ async function nudgeNewMatches(userId: string, chatId: string): Promise<number> 
 // Create draft applications + enqueue tailoring for the user's top matches that
 // don't already have an application. Returns how many were kicked off.
 export async function autoTailorTopMatches(userId: string): Promise<number> {
+  if (AUTO_TAILOR_LIMIT === 0) return 0; // fully on-demand: no proactive tailoring
   const applied = await db
     .select({ jobId: applications.jobId })
     .from(applications)

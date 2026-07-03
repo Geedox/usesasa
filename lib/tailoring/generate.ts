@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Profile } from "@/lib/profile";
 import { stripDashes } from "@/lib/sanitize";
+import { logUsage } from "@/lib/anthropic-usage";
 import type { JdSignals } from "./extract-jd";
 
 export type TailoredOutput = {
@@ -116,6 +117,7 @@ Return ONLY the JSON object.`;
     max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
+  logUsage("tailor.generate", msg);
   const textPart = msg.content.find((c) => c.type === "text");
   const raw = textPart && "text" in textPart ? textPart.text : "";
   const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);

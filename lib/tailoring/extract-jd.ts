@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { logUsage } from "@/lib/anthropic-usage";
 
 // What a job post actually wants, pulled out of the prose so tailoring aligns to
 // the real requirements, not the marketing intro. Many posts bury the required
@@ -37,6 +38,7 @@ POST:
 ${rawJd.slice(0, 8000)}`,
       }],
     });
+    logUsage("tailor.extract_jd", msg);
     const part = msg.content.find((c) => c.type === "text");
     const raw = part && "text" in part ? part.text : "";
     const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)) as Partial<JdSignals>;

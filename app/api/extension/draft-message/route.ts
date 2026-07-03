@@ -6,6 +6,7 @@ import { profiles, preferences } from "@/lib/db/schema";
 import { userFromBearer } from "@/lib/extension-auth";
 import { normalizeProfile } from "@/lib/profile";
 import { stripDashes } from "@/lib/sanitize";
+import { logUsage } from "@/lib/anthropic-usage";
 import { canUseSasa } from "@/lib/can-use";
 
 // Draft a short job-application email or DM from the candidate's profile + the
@@ -63,6 +64,7 @@ Rules:
 Return ONLY JSON: {"subject":"${isDm ? "" : "<short subject>"}","body":"<message>"}.`,
     }],
   });
+  logUsage("draft_message", msg);
   const part = msg.content.find((c) => c.type === "text");
   const raw = part && "text" in part ? part.text : "";
   let subject = "";

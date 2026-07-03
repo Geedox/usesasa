@@ -1,6 +1,7 @@
 // Shared LLM listing extractor for job-board pages with no clean API (Jobberman,
 // MyJobMag, etc.). Fetches the listing HTML and asks an LLM for the postings.
 import Anthropic from "@anthropic-ai/sdk";
+import { logUsage } from "@/lib/anthropic-usage";
 import { stripHtml } from "./util";
 
 export type ListingJob = { title: string; url: string; company?: string; location?: string };
@@ -57,6 +58,7 @@ LINKS:
 ${linkList}`,
     }],
   });
+  logUsage("discovery.listing_extract", msg);
   const part = msg.content.find((c) => c.type === "text");
   const raw = part && "text" in part ? part.text : "";
   try {

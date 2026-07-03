@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Profile } from "@/lib/profile";
+import { logUsage } from "@/lib/anthropic-usage";
 
 // Constitution II gate: detect any claim in generated content not grounded in the
 // canonical profile. Returns the list of fabrications (empty = clean).
@@ -46,6 +47,7 @@ If everything is supported, return {"fabrications": []}.`;
     max_tokens: 600,
     messages: [{ role: "user", content: prompt }],
   });
+  logUsage("tailor.validate", msg);
   const textPart = msg.content.find((c) => c.type === "text");
   const raw = textPart && "text" in textPart ? textPart.text : "";
   const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
