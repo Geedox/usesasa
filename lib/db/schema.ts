@@ -178,6 +178,10 @@ export const preferences = pgTable("preferences", {
   targetRoles: text("target_roles").array(),
   seniority: text("seniority"),
   targetLocations: text("target_locations").array(),
+  // Preferred work arrangements (subset of remote/hybrid/onsite); empty/null = any.
+  workArrangements: text("work_arrangements").array(),
+  // Student/experience mode: only surface internships when true.
+  internshipOnly: boolean("internship_only").notNull().default(false),
   salaryMinUsd: integer("salary_min_usd"),
   needsSponsorship: boolean("needs_sponsorship"),
   sponsorshipCountries: text("sponsorship_countries").array(),

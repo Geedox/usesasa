@@ -43,7 +43,14 @@ function prefilter(keywords: string[], job: { title: string; rawJd: string }): b
 
 type ScoreResult = { score: number; reason: string };
 
-function profileBlurb(p: Profile, prefs?: { targetRoles?: string[] | null; seniority?: string | null }): string {
+type BlurbPrefs = {
+  targetRoles?: string[] | null;
+  seniority?: string | null;
+  arrangements?: string[] | null;
+  internshipOnly?: boolean | null;
+};
+
+function profileBlurb(p: Profile, prefs?: BlurbPrefs): string {
   const lines = [
     p.summary,
     `Recent roles: ${p.experience.slice(0, 4).map((e) => `${e.title} at ${e.company}`).join("; ")}`,
@@ -51,7 +58,15 @@ function profileBlurb(p: Profile, prefs?: { targetRoles?: string[] | null; senio
   ];
   if (prefs?.targetRoles?.length) lines.push(`Target roles the candidate wants: ${prefs.targetRoles.join(", ")}`);
   if (prefs?.seniority) lines.push(`Seniority: ${prefs.seniority}`);
+  if (prefs?.arrangements?.length) lines.push(`Preferred work arrangement: ${prefs.arrangements.join(", ")}`);
+  if (prefs?.internshipOnly) lines.push(`Only interested in internships (score non-internship roles below 35).`);
   return lines.filter(Boolean).join("\n");
+}
+
+// A student who wants experience can ask for internships only. Title-based, which is
+// how ATS boards label them.
+function isInternship(title: string): boolean {
+  return /\bintern(ship)?s?\b|\btrainee\b/i.test(title);
 }
 
 // Score a batch of jobs in one Haiku call. Returns one result per input job,
@@ -165,6 +180,8 @@ export async function scoreJobsForUser(
   const blurb = profileBlurb(profile, {
     targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
     seniority: prefs?.seniority ?? null,
+    arrangements: prefs?.workArrangements ?? null,
+    internshipOnly: prefs?.internshipOnly ?? null,
   });
 
   const anthropic = new Anthropic({ apiKey });
@@ -207,9 +224,12 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   // Use the candidate's onboarding target roles + seniority alongside the CV.
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
   const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
+  const internshipOnly = !!prefs?.internshipOnly;
   const prefsForBlurb = {
     targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
     seniority: prefs?.seniority ?? null,
+    arrangements: prefs?.workArrangements ?? null,
+    internshipOnly,
   };
 
   const allJobs = await db.query.jobs.findMany({ where: eq(jobs.isActive, true) });
@@ -224,6 +244,8 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   const keywords = roleKeywords(profile);
   const candidates = allJobs
     .filter((j) => !seen.has(j.id))
+    // Internships-only students never get non-internships surfaced.
+    .filter((j) => !internshipOnly || isInternship(j.title))
     .filter((j) => prefilter(keywords, { title: j.title, rawJd: j.rawJd ?? "" }))
     .sort((a, b) => (b.postedAt?.getTime() ?? 0) - (a.postedAt?.getTime() ?? 0))
     .slice(0, MAX_CANDIDATES);

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { and, or, eq, gte, ilike, desc, notInArray, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { jobs, matches, companies } from "@/lib/db/schema";
+import { jobs, matches, companies, preferences } from "@/lib/db/schema";
 import { logUsage } from "@/lib/anthropic-usage";
 import { scoreJobsForUser } from "@/lib/matching/score";
 import { canUseSasa } from "@/lib/can-use";
@@ -123,6 +123,15 @@ const FRESH_CANDIDATES = 15; // jobs scored on demand when stored matches are th
 export async function searchRolesForUser(userId: string, query: string, limit = 6): Promise<RoleResult[]> {
   const intent = await parseIntent(query);
   const filters = jobFilters(intent);
+
+  // A student who chose "internships only" in onboarding never gets non-internships,
+  // even for a broad query. (If they explicitly asked for internships, jobFilters
+  // already added it.)
+  const pref = await db.query.preferences.findFirst({
+    where: eq(preferences.userId, userId),
+    columns: { internshipOnly: true },
+  });
+  if (pref?.internshipOnly && !intent.internship) filters.push(ilike(jobs.title, "%intern%"));
 
   // 1. Stored matches — free.
   const stored = await db
