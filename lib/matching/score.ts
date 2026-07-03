@@ -1,10 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { and, desc, eq, gte, isNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, gte, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { jobs, matches, profiles, preferences, applications, users, companies } from "@/lib/db/schema";
+import { jobs, matches, profiles, preferences, applications, users } from "@/lib/db/schema";
 import { normalizeProfile, type Profile } from "@/lib/profile";
 import { enqueueTailorApplication } from "@/lib/queue";
-import { notifyNewMatch } from "@/lib/telegram";
 import { logUsage } from "@/lib/anthropic-usage";
 
 const MAX_CANDIDATES = 300; // jobs scored per run (batched, so ~30 LLM calls)
@@ -15,7 +14,6 @@ export const MATCH_THRESHOLD = 60; // surface + auto-tailor at/above this score
 // by default; set AUTO_TAILOR_LIMIT=0 to disable entirely (matches still surface, and
 // the user tailors on demand from the dashboard).
 const AUTO_TAILOR_LIMIT = Math.max(0, Number(process.env.AUTO_TAILOR_LIMIT ?? 3));
-const NUDGE_PER_RUN = 15; // top new matches asked about on Telegram per run
 
 const STOPWORDS = new Set([
   "with", "team", "lead", "senior", "junior", "staff", "and", "the", "for",
@@ -222,57 +220,14 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   return { scored };
 }
 
-// Decide how to surface new matches based on whether the user linked Telegram.
+// Decide how to surface new matches. Telegram users pull roles on demand (they ask
+// the bot "find me X roles"), so nothing is pushed to them — the bot stays quiet
+// until asked. Users without Telegram get their top matches auto-prepared on the
+// dashboard so drafts are ready to review.
 async function surfaceNewMatches(userId: string): Promise<number> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (user?.telegramChatId) return nudgeNewMatches(userId, user.telegramChatId);
+  if (user?.telegramChatId) return 0;
   return autoTailorTopMatches(userId);
-}
-
-// Gate 1: ask on Telegram about the top new matches (not yet nudged, not applied).
-async function nudgeNewMatches(userId: string, chatId: string): Promise<number> {
-  const applied = await db
-    .select({ jobId: applications.jobId })
-    .from(applications)
-    .where(eq(applications.userId, userId));
-  const appliedJobIds = applied.map((a) => a.jobId);
-
-  const rows = await db
-    .select({
-      matchId: matches.id,
-      jobId: matches.jobId,
-      score: matches.score,
-      reasons: matches.reasons,
-      title: jobs.title,
-      company: companies.name,
-    })
-    .from(matches)
-    .innerJoin(jobs, eq(matches.jobId, jobs.id))
-    .innerJoin(companies, eq(jobs.companyId, companies.id))
-    .where(
-      and(
-        eq(matches.userId, userId),
-        eq(matches.userAction, "pending"),
-        isNull(matches.nudgedAt),
-        gte(matches.score, MATCH_THRESHOLD),
-        appliedJobIds.length ? notInArray(matches.jobId, appliedJobIds) : undefined,
-      ),
-    )
-    .orderBy(desc(matches.score))
-    .limit(NUDGE_PER_RUN);
-
-  for (const r of rows) {
-    await notifyNewMatch({
-      chatId,
-      jobId: r.jobId,
-      company: r.company,
-      title: r.title,
-      score: r.score,
-      reason: (r.reasons as { reason?: string } | null)?.reason,
-    });
-    await db.update(matches).set({ nudgedAt: new Date() }).where(eq(matches.id, r.matchId));
-  }
-  return rows.length;
 }
 
 // Create draft applications + enqueue tailoring for the user's top matches that
