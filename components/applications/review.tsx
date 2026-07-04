@@ -53,6 +53,15 @@ export function ApplicationReview({
   const [submittingCode, setSubmittingCode] = useState(false);
   const [codeMsg, setCodeMsg] = useState("");
   const [retrying, setRetrying] = useState(false);
+  // Show the "starting the browser" panel the instant the user approves/retries,
+  // before the server state has caught up, so the page reacts immediately.
+  const [optimisticQueued, setOptimisticQueued] = useState(false);
+
+  // The effective state that drives the UI. When the user has just approved/retried we
+  // show "queued" immediately; the clearing effect below drops this the moment the
+  // server reports real progress (sending/submitted) or a stop (failed/needs_user).
+  const effState = optimisticQueued ? "queued" : state;
+  const live = effState === "queued" || effState === "sending";
 
   // The Steel live session is short-lived. If the user comes back after it has
   // expired, re-approving opens a FRESH cloud browser and re-fills the form, so they
@@ -64,9 +73,11 @@ export function ApplicationReview({
     try {
       const res = await fetch(`/api/applications/${applicationId}/approve`, { method: "POST" });
       if (!res.ok) throw new Error("Could not restart the submission.");
+      setOptimisticQueued(true);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
       setRetrying(false);
     }
   };
@@ -104,10 +115,16 @@ export function ApplicationReview({
   // While a submission is in flight (or just queued), auto-refresh so the live
   // browser and status appear and update without the user reloading the page.
   useEffect(() => {
-    if (state !== "queued" && state !== "sending") return;
-    const id = setInterval(() => router.refresh(), 4000);
+    if (!live) return;
+    const id = setInterval(() => router.refresh(), 3000);
     return () => clearInterval(id);
-  }, [state, router]);
+  }, [live, router]);
+
+  // Once the server reports a real terminal/in-flight state, drop the optimistic flag
+  // so the UI follows the truth (e.g. a fresh session that came back needs_user/failed).
+  useEffect(() => {
+    if (["sending", "submitted", "failed", "needs_user"].includes(state)) setOptimisticQueued(false);
+  }, [state]);
 
   const setBullet = (ri: number, bi: number, val: string) => {
     setRoles((rs) => rs.map((r, i) => (i === ri ? { ...r, rewrittenBullets: r.rewrittenBullets.map((b, j) => (j === bi ? val : b)) } : r)));
@@ -146,10 +163,13 @@ export function ApplicationReview({
       const res = await fetch(`/api/applications/${applicationId}/approve`, { method: "POST" });
       if (!res.ok) throw new Error("Could not approve.");
       setDirty(false);
-      router.push("/dashboard");
+      // Stay on the page and show the live cloud browser + progress inline, instead
+      // of bouncing to the dashboard.
+      setOptimisticQueued(true);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
       setApproving(false);
     }
   };
@@ -189,7 +209,7 @@ export function ApplicationReview({
       )}
 
       {/* Paused for an emailed verification code — ask the user for it. */}
-      {state === "needs_user" && awaitingCode && (
+      {!live && state === "needs_user" && awaitingCode && (
         <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 mb-8">
           <div className="font-medium text-blue-900 mb-1">Enter the code from your email</div>
           <p className="text-sm text-blue-900/80 mb-3">{submissionNote || "This employer emailed you a verification code to finish the application."}</p>
@@ -224,7 +244,7 @@ export function ApplicationReview({
         </div>
       )}
 
-      {submissionNote && ((state === "needs_user" && !awaitingCode) || state === "failed") && (
+      {!live && submissionNote && ((state === "needs_user" && !awaitingCode) || state === "failed") && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-8">
           <div className="flex items-center gap-2 text-amber-800 font-medium mb-1">
             <AlertTriangle className="w-4 h-4" /> Could not finish submitting
@@ -371,21 +391,22 @@ export function ApplicationReview({
 
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
-      {state === "queued" || state === "sending" || state === "submitted" ? (
+      {live || effState === "submitted" ? (
         <div className="pb-6">
           <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] p-4">
-            <p className="text-sm font-medium mb-1">
-              {state === "submitted" ? "Submitted" : state === "sending" ? "Submitting now" : "Queued for submission"}
+            <p className="text-sm font-medium mb-1 flex items-center gap-2">
+              {live && <Loader2 className="w-4 h-4 animate-spin" />}
+              {effState === "submitted" ? "Submitted" : effState === "sending" ? "Submitting now" : "Queued for submission"}
             </p>
             <p className="text-sm text-muted-foreground">
-              {state === "submitted"
+              {effState === "submitted"
                 ? "This application was submitted for you in the cloud."
-                : state === "sending"
-                  ? "Filling and submitting it in a cloud browser now. Watch it live on the left; take over for a captcha or tricky field anytime."
-                  : "Approved and queued. It will be submitted in a cloud browser shortly."}
+                : effState === "sending"
+                  ? "Filling and submitting it in a cloud browser now. Watch it live below; take over for a captcha or tricky field anytime."
+                  : "Approved and queued. Starting the cloud browser now, this can take a few seconds."}
             </p>
           </div>
-          {(state === "sending" || state === "queued") && (
+          {live && (
             <div className="mt-4 grid lg:grid-cols-[1fr_300px] gap-4">
               {/* Live browser */}
               <div>
@@ -411,7 +432,7 @@ export function ApplicationReview({
       ) : (
         <div className="flex items-center gap-3 pb-6">
           <Button onClick={approve} disabled={approving || saving} className="h-11 px-6 rounded-lg bg-foreground text-background hover:bg-foreground/90 cursor-pointer">
-            {approving ? "Approving…" : "Approve & queue"}
+            {approving ? "Starting…" : "Approve & queue"}
           </Button>
           <Button onClick={save} disabled={saving || approving || !dirty} variant="outline" className="h-11 px-5 rounded-lg cursor-pointer">
             {saving ? "Saving…" : "Save"}
