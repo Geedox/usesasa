@@ -71,6 +71,7 @@ export default async function DashboardPage({
           score: matchesTable.score,
           reasons: matchesTable.reasons,
           appState: applications.state,
+          appVia: applications.submittedVia,
         })
         .from(matchesTable)
         .innerJoin(jobs, eq(matchesTable.jobId, jobs.id))
@@ -131,7 +132,9 @@ export default async function DashboardPage({
     logoUrl: m.logoUrl,
     score: m.score,
     reason: (m.reasons as { reason?: string } | null)?.reason ?? "",
+    locationTag: (m.reasons as { tag?: string } | null)?.tag ?? "",
     appState: m.appState,
+    appVia: m.appVia,
     description: cleanJd(m.rawJd),
     manualApply: prefersManualApply(m.source),
   }));

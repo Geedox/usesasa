@@ -16,18 +16,22 @@ export type MatchCardData = {
   logoUrl: string | null;
   score: number;
   reason: string;
+  locationTag: string; // short eligibility/location label, e.g. "Remote", "US only"
   appState: string | null;
+  appVia: string | null; // "cloud" | "extension" | "manual"
   description: string;
   manualApply: boolean; // aggregator/bot-walled: apply in the user's own browser
 };
 
-function matchStatus(state: string | null): { label: string; cls: string } | null {
+function matchStatus(state: string | null, via: string | null): { label: string; cls: string } | null {
   switch (state) {
     case "drafted": return { label: "Drafting…", cls: "bg-amber-100 text-amber-700" };
     case "awaiting_review": return { label: "Review", cls: "bg-sky-100 text-sky-700" };
     case "queued": return { label: "Queued", cls: "bg-sky-100 text-sky-700" };
     case "sending": return { label: "Sending…", cls: "bg-amber-100 text-amber-700" };
-    case "submitted": return { label: "Applied", cls: "bg-emerald-100 text-emerald-700" };
+    case "submitted": return via === "manual"
+      ? { label: "Applied in browser", cls: "bg-emerald-100 text-emerald-700" }
+      : { label: "Applied", cls: "bg-emerald-100 text-emerald-700" };
     case "needs_user": return { label: "Needs you", cls: "bg-rose-100 text-rose-700" };
     case "failed": return { label: "Failed", cls: "bg-rose-100 text-rose-700" };
     default: return null;
@@ -54,8 +58,12 @@ function MatchRing({ value }: { value: number }) {
 
 export function MatchCard({ card: m }: { card: MatchCardData }) {
   const [open, setOpen] = useState(false);
-  const status = matchStatus(m.appState);
+  const status = matchStatus(m.appState, m.appVia);
   const locationLine = m.location || (m.remotePolicy === "remote" ? "Remote" : "");
+  // Colour the eligibility tag red-ish when it signals a restriction the user likely
+  // can't meet (US only / citizens only), otherwise neutral.
+  const tagRestrictive = /only|citizen|clearance|no sponsor/i.test(m.locationTag);
+  const tagCls = tagRestrictive ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-foreground/[0.04] text-muted-foreground border-foreground/10";
 
   useEffect(() => {
     if (!open) return;
@@ -83,6 +91,9 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
           </div>
           <MatchRing value={m.score} />
         </div>
+        {m.locationTag && (
+          <span className={`self-start rounded-full border px-2.5 py-0.5 text-xs mb-3 ${tagCls}`}>{m.locationTag}</span>
+        )}
         <h3 className="font-display text-xl tracking-tight mb-3 leading-snug">{m.title}</h3>
         <p className="text-sm text-muted-foreground mb-5 line-clamp-3">{m.reason}</p>
         <div className="flex items-center justify-between gap-2 mt-auto pt-2">
@@ -116,6 +127,9 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
                 <p className="text-sm text-muted-foreground mt-1">
                   {m.company}{locationLine ? ` · ${locationLine}` : ""}
                 </p>
+                {m.locationTag && (
+                  <span className={`inline-block mt-2 rounded-full border px-2.5 py-0.5 text-xs ${tagCls}`}>{m.locationTag}</span>
+                )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <MatchRing value={m.score} />

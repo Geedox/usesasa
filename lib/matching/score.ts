@@ -41,13 +41,16 @@ function prefilter(keywords: string[], job: { title: string; rawJd: string }): b
   return keywords.some((k) => hay.includes(k));
 }
 
-type ScoreResult = { score: number; reason: string };
+type ScoreResult = { score: number; reason: string; tag: string };
 
 type BlurbPrefs = {
   targetRoles?: string[] | null;
   seniority?: string | null;
   arrangements?: string[] | null;
   internshipOnly?: boolean | null;
+  authorizedCountries?: string[] | null;
+  needsSponsorship?: boolean | null;
+  sponsorshipCountries?: string[] | null;
 };
 
 function profileBlurb(p: Profile, prefs?: BlurbPrefs): string {
@@ -60,6 +63,14 @@ function profileBlurb(p: Profile, prefs?: BlurbPrefs): string {
   if (prefs?.seniority) lines.push(`Seniority: ${prefs.seniority}`);
   if (prefs?.arrangements?.length) lines.push(`Preferred work arrangement: ${prefs.arrangements.join(", ")}`);
   if (prefs?.internshipOnly) lines.push(`Only interested in internships (score non-internship roles below 35).`);
+  if (prefs?.authorizedCountries?.length) {
+    lines.push(`Can work WITHOUT sponsorship in: ${prefs.authorizedCountries.join(", ")}.`);
+  }
+  if (prefs?.needsSponsorship) {
+    lines.push(`Needs visa sponsorship${prefs.sponsorshipCountries?.length ? ` for: ${prefs.sponsorshipCountries.join(", ")}` : ""}.`);
+  } else if (prefs?.authorizedCountries?.length) {
+    lines.push(`Not seeking visa sponsorship.`);
+  }
   return lines.filter(Boolean).join("\n");
 }
 
@@ -67,6 +78,35 @@ function profileBlurb(p: Profile, prefs?: BlurbPrefs): string {
 // how ATS boards label them.
 function isInternship(title: string): boolean {
   return /\bintern(ship)?s?\b|\btrainee\b/i.test(title);
+}
+
+type PrefRow = {
+  targetRoles?: string[] | null;
+  seniority?: string | null;
+  workArrangements?: string[] | null;
+  internshipOnly?: boolean | null;
+  needsSponsorship?: boolean | null;
+  sponsorshipCountries?: string[] | null;
+  onboarding?: unknown;
+} | null | undefined;
+
+// Collect everything the scorer's blurb needs from a preferences row (target roles,
+// seniority, work arrangement, internship mode, and work authorization).
+function blurbPrefsFor(prefs: PrefRow): BlurbPrefs {
+  const onboarding = prefs?.onboarding as
+    | { targetRoles?: string[]; workEligibility?: { authorizedCountries?: string[]; needsSponsorship?: boolean; sponsorshipCountries?: string[] } }
+    | null
+    | undefined;
+  const elig = onboarding?.workEligibility;
+  return {
+    targetRoles: prefs?.targetRoles ?? onboarding?.targetRoles ?? null,
+    seniority: prefs?.seniority ?? null,
+    arrangements: prefs?.workArrangements ?? null,
+    internshipOnly: prefs?.internshipOnly ?? null,
+    authorizedCountries: elig?.authorizedCountries ?? null,
+    needsSponsorship: prefs?.needsSponsorship ?? elig?.needsSponsorship ?? null,
+    sponsorshipCountries: prefs?.sponsorshipCountries ?? elig?.sponsorshipCountries ?? null,
+  };
 }
 
 // Score a batch of jobs in one Haiku call. Returns one result per input job,
@@ -86,7 +126,7 @@ async function scoreBatch(
     messages: [
       {
         role: "user",
-        content: `Score how well this candidate fits each job below, 0-100, with one short reason each.
+        content: `Score how well this candidate fits each job below, 0-100, with one short reason and a short tag.
 
 First infer the candidate's FUNCTION (e.g. software engineering, data, design, product management, sales, marketing) from their recent roles and skills. Then score by real fit:
 - 80-100: same function, with clear overlap in skills/stack and seniority in range. A strong, realistic fit.
@@ -96,8 +136,12 @@ First infer the candidate's FUNCTION (e.g. software engineering, data, design, p
 
 Do NOT inflate scores for "adjacent" or "transferable" roles in a different function. Be honest. Most roles are not strong fits, and a wrong-function role must score below 35 even if the company or buzzwords look appealing.
 
+WORK AUTHORIZATION (critical): the candidate's authorized locations are in the profile above. If a job REQUIRES citizenship or work authorization the candidate does NOT have and it does NOT offer sponsorship (e.g. "US citizens only", "must be authorized to work in the US", "requires active security clearance", a country-specific onsite role the candidate can't work in), score it 20 or below no matter how well the skills match. Roles that are remote-worldwide, based in a region the candidate is authorized in, or that explicitly sponsor visas are fine.
+
+Also give each job a short "tag" (1-4 words) describing its location/eligibility, e.g. "Remote", "Remote (US only)", "US only", "US citizens only", "EU only", "Onsite Lagos", "Hybrid", "Sponsors visa", "Needs clearance". If nothing is stated, use "Remote" or the city.
+
 Return ONLY a JSON array, one object per job, in the same order:
-[{"i": <index>, "score": <0-100>, "reason": "<one sentence naming the function fit>"}]
+[{"i": <index>, "score": <0-100>, "reason": "<one sentence>", "tag": "<short tag>"}]
 
 CANDIDATE:
 ${blurb}
@@ -120,10 +164,11 @@ ${jobList}`,
   }
   const byIndex = new Map(parsed.map((p) => [p.i, p]));
   return batch.map((_, i) => {
-    const r = byIndex.get(i);
+    const r = byIndex.get(i) as { i: number; score: number; reason: string; tag?: string } | undefined;
     return {
       score: r ? Math.max(0, Math.min(100, Math.round(r.score))) : 0,
       reason: r ? String(r.reason ?? "") : "",
+      tag: r ? String(r.tag ?? "").slice(0, 30) : "",
     };
   });
 }
@@ -145,11 +190,7 @@ export async function scoreJobForUser(
   const profile = normalizeProfile(profileRow.parsedData);
 
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
-  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
-  const blurb = profileBlurb(profile, {
-    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
-    seniority: prefs?.seniority ?? null,
-  });
+  const blurb = profileBlurb(profile, blurbPrefsFor(prefs));
 
   const anthropic = new Anthropic({ apiKey });
   const [result] = await scoreBatch(anthropic, blurb, [
@@ -176,13 +217,7 @@ export async function scoreJobsForUser(
   const profile = normalizeProfile(profileRow.parsedData);
 
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
-  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
-  const blurb = profileBlurb(profile, {
-    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
-    seniority: prefs?.seniority ?? null,
-    arrangements: prefs?.workArrangements ?? null,
-    internshipOnly: prefs?.internshipOnly ?? null,
-  });
+  const blurb = profileBlurb(profile, blurbPrefsFor(prefs));
 
   const anthropic = new Anthropic({ apiKey });
   const out: { jobId: string; score: number; reason: string }[] = [];
@@ -195,10 +230,10 @@ export async function scoreJobsForUser(
         batch.map((j) => ({ title: j.title, location: j.location ?? "", rawJd: j.rawJd ?? "" })),
       );
       for (let k = 0; k < batch.length; k++) {
-        const { score, reason } = results[k];
+        const { score, reason, tag } = results[k];
         await db
           .insert(matches)
-          .values({ userId, jobId: batch[k].id, profileVersion: profileRow.version, score, reasons: { reason }, userAction: "pending" })
+          .values({ userId, jobId: batch[k].id, profileVersion: profileRow.version, score, reasons: { reason, tag }, userAction: "pending" })
           .onConflictDoNothing({ target: [matches.userId, matches.jobId] });
         out.push({ jobId: batch[k].id, score, reason });
       }
@@ -221,16 +256,11 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
   if (!profileRow?.parsedData) return { scored: 0 };
   const profile = normalizeProfile(profileRow.parsedData);
 
-  // Use the candidate's onboarding target roles + seniority alongside the CV.
+  // Use the candidate's onboarding target roles + seniority + work authorization
+  // alongside the CV.
   const prefs = await db.query.preferences.findFirst({ where: eq(preferences.userId, userId) });
-  const onboardingRoles = (prefs?.onboarding as { targetRoles?: string[] } | null)?.targetRoles;
   const internshipOnly = !!prefs?.internshipOnly;
-  const prefsForBlurb = {
-    targetRoles: prefs?.targetRoles ?? onboardingRoles ?? null,
-    seniority: prefs?.seniority ?? null,
-    arrangements: prefs?.workArrangements ?? null,
-    internshipOnly,
-  };
+  const prefsForBlurb = blurbPrefsFor(prefs);
 
   const allJobs = await db.query.jobs.findMany({ where: eq(jobs.isActive, true) });
 
@@ -263,7 +293,7 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
         batch.map((j) => ({ title: j.title, location: j.location ?? "", rawJd: j.rawJd ?? "" })),
       );
       for (let k = 0; k < batch.length; k++) {
-        const { score, reason } = results[k];
+        const { score, reason, tag } = results[k];
         await db
           .insert(matches)
           .values({
@@ -271,7 +301,7 @@ export async function scoreUser(userId: string): Promise<{ scored: number }> {
             jobId: batch[k].id,
             profileVersion: profileRow.version,
             score,
-            reasons: { reason },
+            reasons: { reason, tag },
             userAction: "pending",
           })
           .onConflictDoNothing({ target: [matches.userId, matches.jobId] });
