@@ -258,9 +258,20 @@ export function ApplicationReview({
             {submissionViewUrl ? "Finish it in the live browser below, or start a fresh one to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
           </p>
           {submissionViewUrl && (
-            <div className="mt-4 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
-              <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
-            </div>
+            <>
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm font-medium text-amber-900">Live browser — you can click and type in it</p>
+                <a href={submissionViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-900 underline underline-offset-4">
+                  Open full screen ↗
+                </a>
+              </div>
+              <div className="mt-2 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
+                <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" allow="clipboard-write" />
+              </div>
+              <p className="text-xs text-amber-800 mt-2">
+                Tip: open full screen to solve any &quot;verify you are human&quot; check and complete the form. I&apos;ll detect it and charge 1 credit only when it is actually submitted.
+              </p>
+            </>
           )}
           <Button
             onClick={retryInFreshBrowser}
