@@ -7,6 +7,18 @@ import { generateAnswers, type AnswerQuestion } from "@/lib/answers";
 
 export type Ats = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workday" | "workable" | "teamtailor" | "recruitee" | "bamboohr" | "breezy" | "personio" | "gem" | "custom";
 
+// The ATSes the cloud filler has field maps for. Anything else (aggregator sources
+// like remoteok / myjobmag / remotive, or an unknown board) falls back to "custom":
+// we still open the apply URL in the cloud browser and try a generic fill, so the
+// user can always watch and take over instead of getting "not supported".
+const SUBMITTABLE_ATS = new Set<string>([
+  "greenhouse", "lever", "ashby", "smartrecruiters", "workday", "workable",
+  "teamtailor", "recruitee", "bamboohr", "breezy", "personio", "gem", "custom",
+]);
+function toSubmitAts(source: string): Ats {
+  return (SUBMITTABLE_ATS.has(source) ? source : "custom") as Ats;
+}
+
 // Build the URL of the application *form* (not just the posting page). Lever and
 // Ashby render the posting at the stored url; the form lives at a sub-path.
 export function applyUrlFor(r: {
@@ -171,7 +183,7 @@ export async function buildSubmitContext(applicationId: string): Promise<SubmitC
   };
 
   return {
-    ats: job.source as Ats,
+    ats: toSubmitAts(job.source),
     applyUrl: applyUrlFor({ jobUrl: job.url, jobSource: job.source, jobExternalId: job.externalId, companySlug: company?.atsSlug ?? null }),
     company: company?.name ?? "",
     title: job.title,

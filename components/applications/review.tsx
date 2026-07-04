@@ -246,11 +246,16 @@ export function ApplicationReview({
 
       {!live && submissionNote && ((state === "needs_user" && !awaitingCode) || state === "failed") && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-8">
-          <div className="flex items-center gap-2 text-amber-800 font-medium mb-1">
+          <div className="flex items-center gap-2 text-amber-800 font-medium mb-2">
             <AlertTriangle className="w-4 h-4" /> Could not finish submitting
           </div>
+          {submissionNote && (
+            <p className="text-sm text-amber-900 font-medium bg-amber-100 rounded-lg px-3 py-2 mb-2 break-words">
+              Reason: {submissionNote}
+            </p>
+          )}
           <p className="text-sm text-amber-800">
-            {submissionNote}. {submissionViewUrl ? "Finish it in the live browser below, or start a fresh one to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
+            {submissionViewUrl ? "Finish it in the live browser below, or start a fresh one to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
           </p>
           {submissionViewUrl && (
             <div className="mt-4 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
