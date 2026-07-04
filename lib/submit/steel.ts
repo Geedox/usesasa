@@ -64,20 +64,26 @@ export async function runSteelSubmission(
   let browser: Browser | null = null;
   let keepAlive = false;
   try {
-    // solveCaptcha + proxy are paid-plan features. Opt in with STEEL_PAID=1 once
-    // upgraded; otherwise create a basic session and let the user solve any captcha
-    // in the live view (which still counts, since we observe that browser).
+    // solveCaptcha + proxy are paid-plan features (the proxy is what gets past
+    // Cloudflare / bot walls; solveCaptcha auto-passes reCAPTCHA/hCaptcha/Turnstile).
+    // Enable with STEEL_PAID=1. Without it we create a basic session and let the user
+    // solve any check in the live view (which still counts, since we observe it).
     const paid = process.env.STEEL_PAID === "1";
     // 15 min so a slow fill (LLM answers + captcha solve) never outlives the
     // session, and so the session stays open for the user to finish a paused one.
     const timeout = 900000;
     const createOpts = paid ? { solveCaptcha: true, useProxy: true, blockAds: true, timeout } : { blockAds: true, timeout };
+    console.log(`[steel] app ${applicationId}: creating session (paid=${paid ? "on — proxy + captcha solver" : "off"})`);
     let created;
     try {
       created = await client.sessions.create(createOpts);
     } catch (e) {
-      // Plan rejected an option — fall back to the most basic session.
-      console.warn(`[steel] session opts rejected (${String(e).slice(0, 80)}); retrying basic`);
+      // An option was rejected — fall back to the most basic session so we don't fail
+      // outright. For a paid account this shouldn't happen; warn loudly if it does.
+      console.warn(
+        `[steel] session opts rejected (${String(e).slice(0, 120)}); retrying basic` +
+          (paid ? " — PAID FEATURES (proxy/captcha) DROPPED; check your Steel plan and SDK options" : ""),
+      );
       created = await client.sessions.create({ timeout });
     }
     session = created as unknown as { id: string; websocketUrl: string; sessionViewerUrl?: string; debugUrl?: string };
