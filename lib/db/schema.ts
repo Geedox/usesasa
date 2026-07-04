@@ -337,6 +337,17 @@ export const anthropicUsage = pgTable("anthropic_usage", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("anthropic_usage_created_idx").on(t.createdAt), index("anthropic_usage_tag_idx").on(t.tag)]);
 
+// ---- user feedback (surfaced in the admin) ----
+export const feedback = pgTable("feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  category: text("category"), // "idea" | "bug" | "praise" | "other"
+  message: text("message").notNull(),
+  page: text("page"), // where they were when they sent it
+  handledAt: timestamp("handled_at", { withTimezone: true }), // set when an admin marks it reviewed
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("feedback_created_idx").on(t.createdAt)]);
+
 // ---- WhatsApp message log ----
 export const whatsappMessages = pgTable("whatsapp_messages", {
   id: uuid("id").primaryKey().defaultRandom(),

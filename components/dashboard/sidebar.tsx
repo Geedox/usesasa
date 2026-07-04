@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { FeedbackButton } from "@/components/dashboard/feedback-button";
 import {
   LayoutGrid,
   Search,
@@ -83,6 +84,7 @@ export function DashboardSidebar({
             </Link>
           );
         })}
+        <FeedbackButton />
       </nav>
 
       <div className="flex-1" />
