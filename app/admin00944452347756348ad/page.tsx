@@ -1,7 +1,7 @@
 import { and, eq, isNull, isNotNull, count, sum } from "drizzle-orm";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { mentorApplications, interviewBookings, mentors, users, paystackTransactions, applications } from "@/lib/db/schema";
+import { mentorApplications, interviewBookings, mentors, users, paystackTransactions, applications, feedback } from "@/lib/db/schema";
 
 const BASE = "/admin00944452347756348ad";
 
@@ -19,6 +19,7 @@ export default async function AdminOverviewPage() {
     [pendingApps],
     [unassigned],
     [activeMentors],
+    [pendingFeedback],
   ] = await Promise.all([
     db.select({ n: count() }).from(users),
     db.select({ n: count() }).from(users).where(isNotNull(users.suspendedAt)),
@@ -28,6 +29,7 @@ export default async function AdminOverviewPage() {
     db.select({ n: count() }).from(mentorApplications).where(eq(mentorApplications.status, "pending")),
     db.select({ n: count() }).from(interviewBookings).where(and(eq(interviewBookings.status, "confirmed"), isNull(interviewBookings.mentorId))),
     db.select({ n: count() }).from(mentors).where(eq(mentors.active, true)),
+    db.select({ n: count() }).from(feedback).where(isNull(feedback.handledAt)),
   ]);
 
   const business = [
@@ -36,6 +38,7 @@ export default async function AdminOverviewPage() {
     { label: "Total revenue", value: naira(Number(revenue?.v ?? 0)), href: `${BASE}/transactions` },
     { label: "Applications", value: String(totalApps?.n ?? 0), href: `${BASE}/users` },
     { label: "Submitted", value: String(submittedApps?.n ?? 0), href: `${BASE}/users` },
+    { label: "Feedback to review", value: String(pendingFeedback?.n ?? 0), href: `${BASE}/feedback` },
   ];
 
   const ops = [
