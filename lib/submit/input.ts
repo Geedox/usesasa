@@ -19,6 +19,18 @@ function toSubmitAts(source: string): Ats {
   return (SUBMITTABLE_ATS.has(source) ? source : "custom") as Ats;
 }
 
+// Direct ATS boards we can reliably auto-submit to in the cloud browser. Aggregators
+// (remoteok, himalayas, myjobmag, remotive, weworkremotely, …) and unknown/custom
+// boards usually redirect to the employer's own site and/or sit behind a bot wall, so
+// those are better applied to in the user's own browser.
+const DIRECT_ATS = new Set<string>([
+  "greenhouse", "lever", "ashby", "smartrecruiters", "workday", "workable",
+  "teamtailor", "recruitee", "bamboohr", "breezy", "personio", "gem",
+]);
+export function prefersManualApply(source: string): boolean {
+  return !DIRECT_ATS.has(source);
+}
+
 // Build the URL of the application *form* (not just the posting page). Lever and
 // Ashby render the posting at the stored url; the form lives at a sub-path.
 export function applyUrlFor(r: {

@@ -274,6 +274,22 @@ export async function nativeFillAndSubmit(page: Page, ctx: SubmitContext, opts: 
   await page.waitForSelector("input,textarea,select", { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(1500);
 
+  // Bot-check wall (Cloudflare "verify you are human", "just a moment"). Without the
+  // paid proxy + captcha solver, the agent can't pass these — so pause with a clear
+  // message and keep the session alive for the user to complete in the live browser.
+  const isChallenge = await page.evaluate(() => {
+    const t = (document.body?.innerText ?? "").toLowerCase();
+    if (/verify you are human|performing security verification|just a moment|checking your browser|attention required|needs to review the security of your connection/.test(t)) return true;
+    return !!document.querySelector('iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #challenge-form, #cf-challenge-running');
+  }).catch(() => false);
+  if (isChallenge) {
+    await step("The site is asking to verify you are human");
+    return {
+      result: "needs_user",
+      reason: "This site is showing a 'verify you are human' check that blocks the agent. Open the live browser below, tick the box, then finish the application there — I'll confirm it once it's submitted.",
+    };
+  }
+
   // Attach the résumé first (real upload), skipping any autofill-from-resume dropzone.
   let resumeAttached = false;
   if (ctx.resumeBase64) {
@@ -395,7 +411,7 @@ export async function nativeFillAndSubmit(page: Page, ctx: SubmitContext, opts: 
   if (stillEmpty.length) {
     return { result: "needs_user", reason: `${stillEmpty.length} required field(s) still need an answer: ${stillEmpty.join("; ")}` };
   }
-  if (!resumeAttached && ctx.resumeBase64) return { result: "needs_user", reason: "could not attach the resume file" };
+  if (!resumeAttached && ctx.resumeBase64) return { result: "needs_user", reason: "I couldn't attach your resume automatically here. Open the live browser, upload it, and finish the application there — I'll confirm it once it's submitted." };
   if (opts.dryRun) return { result: "needs_user", reason: "dry run: filled, did not submit" };
 
   const isConfirmed = () =>

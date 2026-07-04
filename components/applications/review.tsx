@@ -53,6 +53,7 @@ export function ApplicationReview({
   const [submittingCode, setSubmittingCode] = useState(false);
   const [codeMsg, setCodeMsg] = useState("");
   const [retrying, setRetrying] = useState(false);
+  const [manualBusy, setManualBusy] = useState(false);
   // Show the "starting the browser" panel the instant the user approves/retries,
   // before the server state has caught up, so the page reacts immediately.
   const [optimisticQueued, setOptimisticQueued] = useState(false);
@@ -79,6 +80,32 @@ export function ApplicationReview({
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setRetrying(false);
+    }
+  };
+
+  // Fallback when the cloud browser can't get through (e.g. a Cloudflare bot wall):
+  // apply in the user's own browser. Opens a blank tab synchronously (so the popup
+  // blocker allows it), charges 1 credit, then points the tab at the job link.
+  const manualApply = async () => {
+    setManualBusy(true);
+    setError("");
+    const win = window.open("", "_blank");
+    try {
+      const res = await fetch(`/api/applications/${applicationId}/manual-apply`, { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.url) {
+        if (win) win.location.href = j.url;
+        else window.open(j.url, "_blank");
+        router.refresh();
+      } else {
+        win?.close();
+        setError(j.error || "Could not open the job link.");
+      }
+    } catch {
+      win?.close();
+      setError("Network error. Try again.");
+    } finally {
+      setManualBusy(false);
     }
   };
 
@@ -258,18 +285,42 @@ export function ApplicationReview({
             {submissionViewUrl ? "Finish it in the live browser below, or start a fresh one to retry." : "Edit below and approve to try again."} Nothing was sent and no credit was used.
           </p>
           {submissionViewUrl && (
-            <div className="mt-4 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
-              <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" />
-            </div>
+            <>
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm font-medium text-amber-900">Live browser — you can click and type in it</p>
+                <a href={submissionViewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-900 underline underline-offset-4">
+                  Open full screen ↗
+                </a>
+              </div>
+              <div className="mt-2 rounded-lg border border-amber-200 overflow-hidden bg-white" style={{ aspectRatio: "16 / 10" }}>
+                <iframe src={submissionViewUrl} className="w-full h-full" title="Live application browser" allow="clipboard-write" />
+              </div>
+              <p className="text-xs text-amber-800 mt-2">
+                Tip: open full screen to solve any &quot;verify you are human&quot; check and complete the form. I&apos;ll detect it and charge 1 credit only when it is actually submitted.
+              </p>
+            </>
           )}
-          <Button
-            onClick={retryInFreshBrowser}
-            disabled={retrying}
-            variant="outline"
-            className="mt-3 h-10 px-5 rounded-lg border-amber-300 text-amber-800 hover:bg-amber-100 cursor-pointer"
-          >
-            {retrying ? "Starting…" : "Start a fresh browser & retry"}
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button
+              onClick={retryInFreshBrowser}
+              disabled={retrying || manualBusy}
+              variant="outline"
+              className="h-10 px-5 rounded-lg border-amber-300 text-amber-800 hover:bg-amber-100 cursor-pointer"
+            >
+              {retrying ? "Starting…" : "Start a fresh browser & retry"}
+            </Button>
+            <Button
+              onClick={manualApply}
+              disabled={manualBusy || retrying}
+              className="h-10 px-5 rounded-lg bg-amber-700 text-white hover:bg-amber-800 cursor-pointer"
+            >
+              {manualBusy ? "Opening…" : "Apply in your own browser (1 credit)"}
+            </Button>
+          </div>
+          <p className="text-xs text-amber-800 mt-2">
+            Some sites block automated applying. Open it in your own browser with your tailored CV and cover letter
+            ready to paste. This uses 1 credit and marks the application as applied.
+          </p>
         </div>
       )}
 
