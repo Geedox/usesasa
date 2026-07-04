@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications, users } from "@/lib/db/schema";
 import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
 import { stripHtml } from "@/lib/ats/util";
+import { prefersManualApply } from "@/lib/submit/input";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { DiscoverButton } from "@/components/dashboard/discover-button";
 import { AddYourOwn } from "@/components/dashboard/add-your-own";
@@ -64,6 +65,7 @@ export default async function DashboardPage({
           remotePolicy: jobs.remotePolicy,
           postedAt: jobs.postedAt,
           rawJd: jobs.rawJd,
+          source: jobs.source,
           company: companies.name,
           logoUrl: companies.logoUrl,
           score: matchesTable.score,
@@ -131,6 +133,7 @@ export default async function DashboardPage({
     reason: (m.reasons as { reason?: string } | null)?.reason ?? "",
     appState: m.appState,
     description: cleanJd(m.rawJd),
+    manualApply: prefersManualApply(m.source),
   }));
 
   const userRow = session

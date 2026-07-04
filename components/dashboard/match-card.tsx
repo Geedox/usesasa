@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { CompanyAvatar } from "@/components/dashboard/company-avatar";
 import { ApplyButton } from "@/components/dashboard/apply-button";
+import { ManualApplyButton } from "@/components/dashboard/manual-apply-button";
 
 export type MatchCardData = {
   id: string;
@@ -17,6 +18,7 @@ export type MatchCardData = {
   reason: string;
   appState: string | null;
   description: string;
+  manualApply: boolean; // aggregator/bot-walled: apply in the user's own browser
 };
 
 function matchStatus(state: string | null): { label: string; cls: string } | null {
@@ -96,7 +98,7 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
                 <button className="rounded-lg border border-foreground/15 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 cursor-pointer">
                   Pass
                 </button>
-                <ApplyButton jobId={m.id} />
+                {m.manualApply ? <ManualApplyButton jobId={m.id} /> : <ApplyButton jobId={m.id} />}
               </>
             )}
           </div>
@@ -142,7 +144,16 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
 
             {!status && (
               <div className="p-4 border-t border-foreground/10 flex items-center justify-end gap-2">
-                <ApplyButton jobId={m.id} />
+                {m.manualApply ? (
+                  <div className="w-full">
+                    <ManualApplyButton jobId={m.id} full />
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      This site blocks automated applying. Opens in your browser with your tailored CV ready. Uses 1 credit.
+                    </p>
+                  </div>
+                ) : (
+                  <ApplyButton jobId={m.id} />
+                )}
               </div>
             )}
           </div>
