@@ -234,6 +234,11 @@ async function pollTailor(id: string): Promise<TailorResultMsg> {
   return null;
 }
 
+// The Sasa brand mark (the arrow ↗). A dark rounded tile for the light card header,
+// and a plain light arrow for the dark bubble.
+const LOGO_TILE = `<svg class="logo" width="18" height="18" viewBox="0 0 512 512" fill="none" aria-hidden="true"><rect x="16" y="16" width="480" height="480" rx="120" fill="#11271f"/><g stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"><path d="M180 332 L320 192"/><path d="M256 192 L320 192 L320 256"/></g></svg>`;
+const LOGO_LIGHT = `<svg width="16" height="16" viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#fff" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"><path d="M150 350 L330 170"/><path d="M252 170 L330 170 L330 248"/></g></svg>`;
+
 function mountWidget() {
   const root = document.createElement("div");
   root.id = "sasa-autofill-root";
@@ -279,7 +284,7 @@ function mountWidget() {
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = `
-    <div class="head" id="head"><span class="dot"></span>Sasa<span class="grip">⠿</span><button class="min" id="min" title="Minimize" aria-label="Minimize">–</button></div>
+    <div class="head" id="head">${LOGO_TILE}Sasa<span class="grip">⠿</span><button class="min" id="min" title="Minimize" aria-label="Minimize">–</button></div>
     <div class="job" id="job"></div>
     <div class="score" id="score"></div>
     <button class="primary" id="tailor">Tailor to this job (1 credit)</button>
@@ -430,7 +435,7 @@ function mountWidget() {
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   bubble.title = "Open Sasa (drag to move)";
-  bubble.innerHTML = `<span class="dot"></span>Sasa`;
+  bubble.innerHTML = `${LOGO_LIGHT}Sasa`;
   shadow.append(bubble);
   let userToggled = false;
   const setMinimized = (min: boolean) => {
