@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Chrome } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 const DISMISS_KEY = "sasa_extension_modal_dismissed";
+const EXTENSION_URL =
+  process.env.NEXT_PUBLIC_EXTENSION_URL ||
+  "https://chromewebstore.google.com/detail/sasa/pcpbinadolndiebjjoidnjbnmkfjllif";
 
-// One-time heads-up that the Chrome extension is on the way. The download is not
-// live yet, so the primary action is disabled ("Coming soon"). Suppressed once the
-// user has it set up (connected = true) or dismissed it on this browser.
+// One-time nudge to install the Sasa Chrome extension (now live on the Web Store).
+// Suppressed once the user has it set up (connected = true) or dismissed it here.
 export function ExtensionModal({ connected }: { connected: boolean }) {
   const [open, setOpen] = useState(false);
 
@@ -31,24 +34,21 @@ export function ExtensionModal({ connected }: { connected: boolean }) {
           <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-foreground/[0.06]">
             <Chrome className="h-5 w-5" />
           </div>
-          <DialogTitle className="font-display text-2xl tracking-tight">The Sasa Chrome extension is coming soon</DialogTitle>
+          <DialogTitle className="font-display text-2xl tracking-tight">Add the Sasa Chrome extension</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            We are putting the finishing touches on the Sasa browser extension. It will let you autofill and queue
-            applications on any career page, right from your own browser. In the meantime, Sasa already finds roles
-            and submits the applications you approve for you, so you can keep applying today. We will let you know
-            the moment it is ready.
+            Get the Sasa browser extension to autofill and queue applications on any career page, right from your own
+            browser. It shows your match score, tailors your CV to the role, and fills the form so you just review and
+            submit. It is free and installs in a couple of clicks.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={dismiss} className="rounded-lg cursor-pointer">
-            Got it
+            Maybe later
           </Button>
-          <Button
-            disabled
-            aria-disabled="true"
-            className="rounded-lg bg-foreground text-background opacity-60 cursor-not-allowed"
-          >
-            Coming soon
+          <Button asChild className="rounded-lg bg-foreground text-background hover:bg-foreground/90 cursor-pointer">
+            <Link href={EXTENSION_URL} target="_blank" rel="noreferrer" onClick={dismiss}>
+              Add to Chrome
+            </Link>
           </Button>
         </DialogFooter>
       </DialogContent>

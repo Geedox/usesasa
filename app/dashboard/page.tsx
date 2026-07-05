@@ -4,7 +4,7 @@ import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications, users } from "@/lib/db/schema";
 import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
-import { stripHtml } from "@/lib/ats/util";
+import { cleanJobDescription } from "@/lib/ats/util";
 import { prefersManualApply } from "@/lib/submit/input";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { DiscoverButton } from "@/components/dashboard/discover-button";
@@ -28,16 +28,6 @@ function timeAgo(date: Date | null): string {
   if (days < 30) return `${days} days ago`;
   const months = Math.floor(days / 30);
   return months === 1 ? "1 month ago" : `${months} months ago`;
-}
-
-// Clean a raw job description for display in the drawer: strip HTML, remove links and
-// emails (the user asked for "no links or anything"), and tidy whitespace.
-function cleanJd(raw: string | null): string {
-  if (!raw) return "";
-  let t = stripHtml(raw);
-  t = t.replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.\S+/gi, "").replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "");
-  t = t.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return t.slice(0, 8000);
 }
 
 export default async function DashboardPage({
@@ -135,7 +125,7 @@ export default async function DashboardPage({
     locationTag: (m.reasons as { tag?: string } | null)?.tag ?? "",
     appState: m.appState,
     appVia: m.appVia,
-    description: cleanJd(m.rawJd),
+    description: cleanJobDescription(m.rawJd),
     manualApply: prefersManualApply(m.source),
   }));
 

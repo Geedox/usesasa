@@ -21,6 +21,16 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
+// Clean a raw job description for display in a drawer: strip HTML, remove links and
+// emails ("no links or anything"), and tidy whitespace/newlines. Capped in length.
+export function cleanJobDescription(raw: string | null): string {
+  if (!raw) return "";
+  let t = stripHtml(raw);
+  t = t.replace(/https?:\/\/\S+/gi, "").replace(/\bwww\.\S+/gi, "").replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "");
+  t = t.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return t.slice(0, 8000);
+}
+
 // A normalized "company|title" key so the same role from different sources collapses
 // to one. Strips punctuation, common seniority/remote noise, and collapses whitespace.
 export function makeDedupeKey(company: string, title: string): string {

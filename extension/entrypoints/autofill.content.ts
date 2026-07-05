@@ -21,33 +21,53 @@ type TailorQueued = { ok: true; applicationId: string } | { ok: false; error: st
 type TailorResultMsg = ({ ready: true } & FillInputMsg) | { ready: false; blocked?: boolean; message?: string } | null;
 type TailorLookupMsg = { found: false } | { found: true; applicationId: string; ready: boolean; state: string };
 
-// Decide whether to show the widget. We err on the side of showing it: any known
-// job board / ATS, an Apply button, an application form, or job wording in the
-// URL / title / headings all count. Better a stray appearance than a missed job.
+// Pure ATS / job-board hosts — these exist only to post/host jobs, so always show.
+const ATS_HOST_RE = /(greenhouse|lever\.co|ashbyhq|ashby|workable|smartrecruiters|myworkdayjobs|bamboohr|teamtailor|recruitee|breezy|jazzhr|jobvite|icims|taleo|successfactors|join\.com|personio|pinpointhq|myjobmag|jobberman|weworkremotely|remoteok|wellfound|otta|eightfold|dayforcehcm|jobs\.gem\.com)/i;
+
+// Decide whether to show the widget. Precision matters: a stray appearance on every
+// login / newsletter / shopping page is worse than missing the odd job page. So we
+// only show on a pure ATS host, a schema.org JobPosting, a resume upload, or when at
+// least TWO independent job signals agree.
 function looksLikeJobPage(): boolean {
   const host = location.hostname;
-  // 1) Known job boards / ATS hosts — always show.
-  if (/(greenhouse|lever\.co|ashbyhq|workable|smartrecruiters|myworkdayjobs|workday|bamboohr|teamtailor|recruitee|breezy|jazzhr|jobvite|icims|taleo|successfactors|smartrecruiters|linkedin|indeed|glassdoor|ziprecruiter|wellfound|angel\.co|remoteok|weworkremotely|myjobmag|jobberman|thehub|builtin|dice\.com|monster|simplyhired|naukri|seek\.com|otta|pinpointhq|join\.com|personio|workforcenow|adp|paylocity|rippling|gusto|hire\.|careers?\.)/i.test(host)) return true;
+  if (ATS_HOST_RE.test(host)) return true;
 
-  // 2) Job wording in the URL or page title.
-  const hay = `${location.href} ${document.title}`.toLowerCase();
-  if (/apply|application|career|jobs?\b|position|vacanc|recruit|hiring|opening|posting|\brole\b|employment|we.?re hiring/.test(hay)) return true;
+  const norm = (s?: string | null) => (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
-  // 3) An Apply button / link.
-  const hasApply = Array.from(document.querySelectorAll("a,button,[role='button']")).some((el) => {
-    const t = (el.textContent || "").trim().toLowerCase();
-    return t.length <= 32 && /\bapply\b|apply now|submit application|apply for|i.?m interested/.test(t);
+  // schema.org JobPosting structured data is definitive.
+  for (const s of Array.from(document.querySelectorAll('script[type="application/ld+json"]'))) {
+    if (/"@type"\s*:\s*"JobPosting"/i.test(s.textContent || "")) return true;
+  }
+
+  // A resume/CV file upload is a strong, on-its-own signal of an application form.
+  const resumeUpload = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).some((el) => {
+    const ctx = norm(`${el.getAttribute("name") || ""} ${el.id} ${el.getAttribute("accept") || ""} ${el.closest("label,div,section,fieldset,form")?.textContent || ""}`).slice(0, 300);
+    return /resume|cv\b|curriculum vitae/.test(ctx);
   });
-  if (hasApply) return true;
+  if (resumeUpload) return true;
 
-  // 4) An application form (email or file/upload input).
-  if (document.querySelector('input[type="email"], input[name*="email" i], input[id*="email" i], input[type="file"]')) return true;
+  // Otherwise require at least two independent signals.
+  let signals = 0;
 
-  // 5) Job wording in the visible headings.
-  const heads = Array.from(document.querySelectorAll("h1,h2,h3")).map((h) => h.textContent || "").join(" ").toLowerCase();
-  if (/job description|responsibilit|qualification|requirement|about the role|what you.?ll do|who you are|benefits|compensation|salary/.test(heads)) return true;
+  // A careers/jobs subdomain (careers.acme.com, jobs.acme.com, apply.acme.com…).
+  if (/^(careers?|jobs?|apply|boards|talent|join|work)\./i.test(host)) signals++;
 
-  return false;
+  // A job-ish path segment (not just the word somewhere in the query string).
+  if (/\/(jobs?|careers?|positions?|vacanc(y|ies)|openings?|apply|job-application|job_application|viewjob)(\/|$|[?#])/i.test(location.pathname)) signals++;
+
+  // A specific "apply for this job" button (not a generic "apply filters").
+  const applyBtn = Array.from(document.querySelectorAll("a,button,[role='button']")).some((el) => {
+    const x = norm(el.textContent);
+    if (!x || x.length > 40) return false;
+    return x === "apply" || /apply now|apply for (this )?(job|role|position)|submit (your )?application|easy apply|i.?m interested in this/.test(x);
+  });
+  if (applyBtn) signals++;
+
+  // Structured job-posting headings.
+  const heads = Array.from(document.querySelectorAll("h1,h2,h3,[role='heading']")).map((h) => norm(h.textContent));
+  if (heads.some((h) => /responsibilit|qualification|requirements?\b|what you.?ll do|who you are|about (the|this) role|job description|minimum qualif|preferred qualif|what we.?re looking for/.test(h))) signals++;
+
+  return signals >= 2;
 }
 
 const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
@@ -176,24 +196,10 @@ export default defineContentScript({
     // mounts here so the user gets match score / tailor / suggest on ATS posting pages.
     // The scripts use different message types, so they don't collide.
 
-    let mounted = false;
-    const tryMount = () => {
-      if (mounted) return true;
-      if (looksLikeJobPage()) { mountWidget(); mounted = true; return true; }
-      return false;
-    };
-    // Keep checking for a while: many boards render late or are SPAs, and the
-    // content (Apply button, headings) we key off may not exist on first paint.
-    if (!tryMount()) {
-      let tries = 0;
-      const iv = setInterval(() => { if (tryMount() || ++tries > 20) clearInterval(iv); }, 1500);
-    }
-    // SPA route changes (clicking into a job from a list) don't reload the page, so
-    // re-check after navigation if we haven't mounted yet.
-    let lastUrl = location.href;
-    setInterval(() => {
-      if (location.href !== lastUrl) { lastUrl = location.href; if (!mounted) tryMount(); }
-    }, 1500);
+    // Always mount, but start MINIMIZED (a small bubble) on pages that don't look
+    // like a job page. On a detected job page it auto-expands. The user can drag the
+    // bubble anywhere and open it manually if a job page slips past detection.
+    mountWidget();
   },
 });
 
@@ -228,10 +234,17 @@ async function pollTailor(id: string): Promise<TailorResultMsg> {
   return null;
 }
 
+// The Sasa brand mark (the arrow ↗). A dark rounded tile for the light card header,
+// and a plain light arrow for the dark bubble.
+const LOGO_TILE = `<svg class="logo" width="18" height="18" viewBox="0 0 512 512" fill="none" aria-hidden="true"><rect x="16" y="16" width="480" height="480" rx="120" fill="#11271f"/><g stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"><path d="M180 332 L320 192"/><path d="M256 192 L320 192 L320 256"/></g></svg>`;
+const LOGO_LIGHT = `<svg width="16" height="16" viewBox="0 0 512 512" fill="none" aria-hidden="true"><g stroke="#fff" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"><path d="M150 350 L330 170"/><path d="M252 170 L330 170 L330 248"/></g></svg>`;
+
 function mountWidget() {
   const root = document.createElement("div");
   root.id = "sasa-autofill-root";
-  root.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;";
+  // Default to the middle of the right edge (out of the way of the bottom-right chat
+  // widgets many sites use). The user can drag it anywhere; we remember where.
+  root.style.cssText = "position:fixed;top:50%;right:20px;transform:translateY(-50%);z-index:2147483647;";
   const shadow = root.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
@@ -240,6 +253,11 @@ function mountWidget() {
       border-radius:14px; padding:12px; box-shadow:0 8px 30px rgba(0,0,0,.16); width:300px; max-height:80vh; overflow:auto; }
     .head { display:flex; align-items:center; gap:7px; color:#11271f; font-weight:600; margin-bottom:6px; cursor:move; user-select:none; touch-action:none; }
     .grip { margin-left:auto; color:#9aa5a0; font-size:14px; letter-spacing:1px; }
+    .min { width:22px; height:22px; margin-top:0; padding:0; line-height:20px; text-align:center; border:none; border-radius:6px;
+      background:transparent; color:#9aa5a0; font-size:17px; cursor:pointer; }
+    .min:hover { background:rgba(0,0,0,.06); color:#11271f; }
+    .bubble { display:none; align-items:center; gap:7px; background:#11271f; color:#fff; border-radius:9999px; padding:9px 13px;
+      box-shadow:0 8px 30px rgba(0,0,0,.22); cursor:pointer; font:600 12px ui-sans-serif, system-ui, sans-serif; }
     .dot { width:8px; height:8px; border-radius:9999px; background:#22c55e; }
     .job { font-size:11px; color:#5b6660; margin-bottom:9px; line-height:1.35; }
     .job b { color:#11271f; font-weight:600; }
@@ -266,7 +284,7 @@ function mountWidget() {
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = `
-    <div class="head" id="head"><span class="dot"></span>Sasa<span class="grip">⠿</span></div>
+    <div class="head" id="head">${LOGO_TILE}Sasa<span class="grip">⠿</span><button class="min" id="min" title="Minimize" aria-label="Minimize">–</button></div>
     <div class="job" id="job"></div>
     <div class="score" id="score"></div>
     <button class="primary" id="tailor">Tailor to this job (1 credit)</button>
@@ -365,25 +383,79 @@ function mountWidget() {
   // SPA swaps the detail pane, without needing a manual refresh.
   setInterval(showJob, 1500);
 
-  // Make the widget draggable by its header.
+  // Drag helper: a drag on the handle repositions the whole widget; a tap (no real
+  // movement) fires onTap. Used by the card header and the collapsed bubble, so the
+  // user can move either around the browser.
   const head = card.querySelector<HTMLDivElement>("#head")!;
-  let dragging = false, startX = 0, startY = 0, baseX = 0, baseY = 0;
-  head.addEventListener("pointerdown", (e) => {
-    dragging = true;
-    const r = root.getBoundingClientRect();
-    baseX = r.left; baseY = r.top; startX = e.clientX; startY = e.clientY;
-    root.style.left = `${baseX}px`; root.style.top = `${baseY}px`; root.style.right = "auto"; root.style.bottom = "auto";
-    try { head.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-  });
-  head.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const nx = Math.max(4, Math.min(window.innerWidth - 80, baseX + (e.clientX - startX)));
-    const ny = Math.max(4, Math.min(window.innerHeight - 40, baseY + (e.clientY - startY)));
-    root.style.left = `${nx}px`; root.style.top = `${ny}px`;
-  });
-  const endDrag = (e: PointerEvent) => { if (dragging) { dragging = false; try { head.releasePointerCapture(e.pointerId); } catch { /* ignore */ } } };
-  head.addEventListener("pointerup", endDrag);
-  head.addEventListener("pointercancel", endDrag);
+  const enableDrag = (handle: HTMLElement, onTap?: () => void) => {
+    let dragging = false, moved = false, sx = 0, sy = 0, bx = 0, by = 0;
+    handle.addEventListener("pointerdown", (e) => {
+      dragging = true; moved = false;
+      const r = root.getBoundingClientRect();
+      bx = r.left; by = r.top; sx = e.clientX; sy = e.clientY;
+      // Pin to left/top and drop the centering transform so drag math is 1:1.
+      root.style.left = `${bx}px`; root.style.top = `${by}px`; root.style.right = "auto"; root.style.bottom = "auto"; root.style.transform = "none";
+      try { handle.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      if (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4) moved = true;
+      const nx = Math.max(4, Math.min(window.innerWidth - 44, bx + (e.clientX - sx)));
+      const ny = Math.max(4, Math.min(window.innerHeight - 44, by + (e.clientY - sy)));
+      root.style.left = `${nx}px`; root.style.top = `${ny}px`;
+    });
+    const end = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      if (moved) {
+        // Remember where the user parked it, so it stays there on future pages.
+        chrome.storage?.local.set({ sasaWidgetPos: { left: parseFloat(root.style.left) || 0, top: parseFloat(root.style.top) || 0 } }).catch(() => {});
+      } else if (onTap) onTap();
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  };
+  enableDrag(head);
+
+  // Restore a previously-dragged position (clamped to the current viewport).
+  chrome.storage?.local.get("sasaWidgetPos").then((s) => {
+    const p = s?.sasaWidgetPos as { left?: number; top?: number } | undefined;
+    if (p && typeof p.left === "number" && typeof p.top === "number") {
+      root.style.left = `${Math.max(4, Math.min(window.innerWidth - 44, p.left))}px`;
+      root.style.top = `${Math.max(4, Math.min(window.innerHeight - 44, p.top))}px`;
+      root.style.right = "auto"; root.style.bottom = "auto"; root.style.transform = "none";
+    }
+  }).catch(() => {});
+
+  // Minimize / expand + the collapsed bubble. The minimized state is driven by
+  // job-page detection until the user manually toggles it. On a job page it expands;
+  // elsewhere it stays a small draggable bubble the user can tap open anytime.
+  const minBtn = card.querySelector<HTMLButtonElement>("#min")!;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.title = "Open Sasa (drag to move)";
+  bubble.innerHTML = `${LOGO_LIGHT}Sasa`;
+  shadow.append(bubble);
+  let userToggled = false;
+  const setMinimized = (min: boolean) => {
+    card.style.display = min ? "none" : "";
+    bubble.style.display = min ? "flex" : "none";
+  };
+  minBtn.addEventListener("pointerdown", (e) => e.stopPropagation()); // don't start a drag
+  minBtn.addEventListener("click", (e) => { e.stopPropagation(); userToggled = true; setMinimized(true); });
+  enableDrag(bubble, () => { userToggled = true; setMinimized(false); });
+
+  // Auto-decide minimized vs open from detection, until the user takes over. Re-check
+  // for a while (boards render late) and reset the override on SPA navigation.
+  const applyDetection = () => { if (!userToggled) setMinimized(!looksLikeJobPage()); };
+  applyDetection();
+  let detChecks = 0;
+  const detIv = setInterval(() => { applyDetection(); if (++detChecks > 20) clearInterval(detIv); }, 1500);
+  let lastDetUrl = location.href;
+  setInterval(() => {
+    if (location.href !== lastDetUrl) { lastDetUrl = location.href; userToggled = false; applyDetection(); }
+  }, 1500);
 
   // Render a drafted email/DM with copy buttons (user copies + sends themselves).
   const renderDraft = (draft: DraftedMessage) => {
