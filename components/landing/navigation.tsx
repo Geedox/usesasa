@@ -13,9 +13,22 @@ const navLinks = [
   { name: "FAQ", href: "#faq" },
 ];
 
+// The Sasa product walkthrough on YouTube.
+const YT_ID = "qd5kcNAfHj0";
+
+function YouTubeGlyph({ size = 20 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 28 20" width={size} height={(size * 20) / 28} aria-hidden="true" className="shrink-0">
+      <path d="M27.4 3.12a3.5 3.5 0 0 0-2.46-2.48C22.7.02 14 .02 14 .02S5.3.02 3.06.64A3.5 3.5 0 0 0 .6 3.12 36.6 36.6 0 0 0 0 10a36.6 36.6 0 0 0 .6 6.88 3.5 3.5 0 0 0 2.46 2.48C5.3 20 14 20 14 20s8.7 0 10.94-.64a3.5 3.5 0 0 0 2.46-2.48A36.6 36.6 0 0 0 28 10a36.6 36.6 0 0 0-.6-6.88Z" fill="#FF0000" />
+      <path d="M11.2 14.29 18.4 10l-7.2-4.29v8.58Z" fill="#fff" />
+    </svg>
+  );
+}
+
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [videoOpen, setVideoOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -67,6 +80,14 @@ export function Navigation() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setVideoOpen(true)}
+              className="inline-flex items-center gap-2 text-sm text-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+            >
+              <YouTubeGlyph size={22} />
+              Watch demo
+            </button>
             {/* <a href="#" className={`text-foreground/70 hover:text-foreground transition-all duration-500 ${isScrolled ? "text-xs" : "text-sm"}`}>
               Log in
             </a> */}
@@ -132,13 +153,14 @@ export function Navigation() {
           }`}
           style={{ transitionDelay: isMobileMenuOpen ? "300ms" : "0ms" }}
           >
-            {/* <Button
+            <Button
               variant="outline"
-              className="flex-1 rounded-full h-14 text-base"
-              onClick={() => setIsMobileMenuOpen(false)}
+              className="flex-1 rounded-full h-14 text-base cursor-pointer inline-flex items-center gap-2"
+              onClick={() => { setIsMobileMenuOpen(false); setVideoOpen(true); }}
             >
-              Log in
-            </Button> */}
+              <YouTubeGlyph size={22} />
+              Watch demo
+            </Button>
             <Button
               asChild
               className="flex-1 bg-foreground text-background rounded-full h-14 text-base cursor-pointer"
@@ -150,6 +172,34 @@ export function Navigation() {
           </div>
         </div>
       </div>
+
+      {/* Embedded walkthrough modal */}
+      {videoOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setVideoOpen(false)}
+        >
+          <div className="relative w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setVideoOpen(false)}
+              aria-label="Close video"
+              className="absolute -top-11 right-0 inline-flex items-center gap-1.5 text-white/80 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" /> Close
+            </button>
+            <div className="relative w-full overflow-hidden rounded-xl bg-black shadow-2xl" style={{ aspectRatio: "16 / 9" }}>
+              <iframe
+                src={`https://www.youtube.com/embed/${YT_ID}?autoplay=1&rel=0`}
+                title="Sasa product walkthrough"
+                className="absolute inset-0 w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

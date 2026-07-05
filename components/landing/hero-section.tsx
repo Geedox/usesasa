@@ -164,7 +164,13 @@ export function HeroSection() {
               asChild
               className="h-12 sm:h-14 px-5 sm:px-8 text-sm sm:text-base rounded-full border-foreground/20 hover:bg-foreground/5 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <a href="#how-it-works">See how it works</a>
+              <a href="https://youtu.be/qd5kcNAfHj0" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5">
+                <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true" className="shrink-0">
+                  <path d="M27.4 3.12a3.5 3.5 0 0 0-2.46-2.48C22.7.02 14 .02 14 .02S5.3.02 3.06.64A3.5 3.5 0 0 0 .6 3.12 36.6 36.6 0 0 0 0 10a36.6 36.6 0 0 0 .6 6.88 3.5 3.5 0 0 0 2.46 2.48C5.3 20 14 20 14 20s8.7 0 10.94-.64a3.5 3.5 0 0 0 2.46-2.48A36.6 36.6 0 0 0 28 10a36.6 36.6 0 0 0-.6-6.88Z" fill="#FF0000" />
+                  <path d="M11.2 14.29 18.4 10l-7.2-4.29v8.58Z" fill="#fff" />
+                </svg>
+                See how it works
+              </a>
             </Button>
           </div>
         </div>
