@@ -61,6 +61,9 @@ The Sasa team`;
   return { subject, text, html };
 }
 
+const EXTENSION_URL = "https://chromewebstore.google.com/detail/sasa/pcpbinadolndiebjjoidnjbnmkfjllif";
+const WALKTHROUGH_URL = "https://youtu.be/qd5kcNAfHj0";
+
 export function buildWelcomeEmail(name?: string | null) {
   const first = name?.trim().split(" ")[0] || "there";
   const dashboard = `${SITE_URL}/dashboard`;
@@ -79,6 +82,9 @@ Sasa applies to jobs on your behalf while you keep your day job. Here's what hap
 
 Open your dashboard: ${dashboard}
 
+Watch the product walkthrough: ${WALKTHROUGH_URL}
+Get the Chrome extension: ${EXTENSION_URL}
+
 If you have any questions, just reply to this email. A real founder will read it.
 
 The Sasa team`;
@@ -93,6 +99,10 @@ The Sasa team`;
     <li>You approve and we apply. A tailored CV and cover letter for each role, submitted from your own browser.</li>
   </ol>
   <p><a href="${dashboard}">Open your dashboard</a></p>
+  <p style="margin: 20px 0;">
+    <a href="${WALKTHROUGH_URL}" style="display: inline-block; margin-right: 18px;">Watch the product walkthrough</a>
+    <a href="${EXTENSION_URL}">Get the Chrome extension</a>
+  </p>
   <p>If you have any questions, just reply to this email. A real founder will read it.</p>
   <p>The Sasa team</p>
 </div>`;
