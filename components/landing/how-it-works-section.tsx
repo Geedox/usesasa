@@ -106,6 +106,25 @@ export function HowItWorksSection() {
             <br />
             <span className="text-background/50">Then keep your day job.</span>
           </h2>
+
+          {/* Watch the product walkthrough on YouTube */}
+          <a
+            href="https://youtu.be/qd5kcNAfHj0"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-3 mt-8 rounded-full border border-background/20 pl-2 pr-5 py-2 hover:border-background/50 hover:bg-background/[0.05] transition-colors group"
+          >
+            <svg viewBox="0 0 28 20" width="38" height="27" aria-hidden="true" className="shrink-0">
+              <path
+                d="M27.4 3.12a3.5 3.5 0 0 0-2.46-2.48C22.7.02 14 .02 14 .02S5.3.02 3.06.64A3.5 3.5 0 0 0 .6 3.12 36.6 36.6 0 0 0 0 10a36.6 36.6 0 0 0 .6 6.88 3.5 3.5 0 0 0 2.46 2.48C5.3 20 14 20 14 20s8.7 0 10.94-.64a3.5 3.5 0 0 0 2.46-2.48A36.6 36.6 0 0 0 28 10a36.6 36.6 0 0 0-.6-6.88Z"
+                fill="#FF0000"
+              />
+              <path d="M11.2 14.29 18.4 10l-7.2-4.29v8.58Z" fill="#fff" />
+            </svg>
+            <span className="text-sm font-medium text-background/80 group-hover:text-background">
+              Watch the product walkthrough
+            </span>
+          </a>
         </div>
 
         {/* Main content */}
