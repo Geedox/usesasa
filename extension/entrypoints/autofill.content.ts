@@ -237,7 +237,9 @@ async function pollTailor(id: string): Promise<TailorResultMsg> {
 function mountWidget() {
   const root = document.createElement("div");
   root.id = "sasa-autofill-root";
-  root.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;";
+  // Default to the middle of the right edge (out of the way of the bottom-right chat
+  // widgets many sites use). The user can drag it anywhere; we remember where.
+  root.style.cssText = "position:fixed;top:50%;right:20px;transform:translateY(-50%);z-index:2147483647;";
   const shadow = root.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
@@ -386,7 +388,8 @@ function mountWidget() {
       dragging = true; moved = false;
       const r = root.getBoundingClientRect();
       bx = r.left; by = r.top; sx = e.clientX; sy = e.clientY;
-      root.style.left = `${bx}px`; root.style.top = `${by}px`; root.style.right = "auto"; root.style.bottom = "auto";
+      // Pin to left/top and drop the centering transform so drag math is 1:1.
+      root.style.left = `${bx}px`; root.style.top = `${by}px`; root.style.right = "auto"; root.style.bottom = "auto"; root.style.transform = "none";
       try { handle.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     });
     handle.addEventListener("pointermove", (e) => {
@@ -400,12 +403,25 @@ function mountWidget() {
       if (!dragging) return;
       dragging = false;
       try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-      if (!moved && onTap) onTap();
+      if (moved) {
+        // Remember where the user parked it, so it stays there on future pages.
+        chrome.storage?.local.set({ sasaWidgetPos: { left: parseFloat(root.style.left) || 0, top: parseFloat(root.style.top) || 0 } }).catch(() => {});
+      } else if (onTap) onTap();
     };
     handle.addEventListener("pointerup", end);
     handle.addEventListener("pointercancel", end);
   };
   enableDrag(head);
+
+  // Restore a previously-dragged position (clamped to the current viewport).
+  chrome.storage?.local.get("sasaWidgetPos").then((s) => {
+    const p = s?.sasaWidgetPos as { left?: number; top?: number } | undefined;
+    if (p && typeof p.left === "number" && typeof p.top === "number") {
+      root.style.left = `${Math.max(4, Math.min(window.innerWidth - 44, p.left))}px`;
+      root.style.top = `${Math.max(4, Math.min(window.innerHeight - 44, p.top))}px`;
+      root.style.right = "auto"; root.style.bottom = "auto"; root.style.transform = "none";
+    }
+  }).catch(() => {});
 
   // Minimize / expand + the collapsed bubble. The minimized state is driven by
   // job-page detection until the user manually toggles it. On a job page it expands;
