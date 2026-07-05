@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { notifyCreditsChanged } from "@/components/dashboard/credits-badge";
 
 // Apply in the user's own browser: confirms the 1-credit charge, then opens a blank
 // tab synchronously (so the popup blocker allows it), charges, and points the tab at
@@ -35,6 +36,7 @@ export function ManualApplyButton({ jobId, full = false }: { jobId: string; full
         else window.open(j.url, "_blank");
         setApplied(true);
         setConfirmOpen(false);
+        notifyCreditsChanged();
         router.refresh();
       } else {
         win?.close();

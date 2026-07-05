@@ -190,7 +190,21 @@ export default defineContentScript({
     // Only the top frame renders the widget.
     if (window.top !== window.self) return;
     const host = location.hostname;
-    if (/(^|\.)usesasa\.xyz$/.test(host) || host === "localhost") return; // our own app
+    // On our own app: don't render the widget, but if a DIFFERENT user is now signed
+    // in than the one the extension is paired to, disconnect it so it asks for a fresh
+    // token for this account (no stale stats from the previous user).
+    if (/(^|\.)usesasa\.xyz$/.test(host) || host === "localhost") {
+      void (async () => {
+        try {
+          const meta = document.querySelector('meta[name="sasa-user"]')?.getAttribute("content") || "";
+          const { token, pairedUser } = await chrome.storage.local.get(["token", "pairedUser"]);
+          if (token && pairedUser && meta && meta !== pairedUser) {
+            await chrome.storage.local.remove(["token", "pairedUser", "autoSubmit"]);
+          }
+        } catch { /* ignore */ }
+      })();
+      return;
+    }
     // NOTE: greenhouse/lever/ashby also have a dedicated script, but it's a passive
     // listener for the queued-application fill flow (no UI). The universal widget still
     // mounts here so the user gets match score / tailor / suggest on ATS posting pages.
@@ -294,6 +308,7 @@ function mountWidget() {
     <button class="ghost" id="quick">Quick fill</button>
     <button class="ghost" id="suggest">Suggest answers</button>
     <button class="ghost" id="draft">Draft email / DM</button>
+    <button class="ghost" id="markApplied">I applied, mark it (1 credit)</button>
     <div class="status" id="status"></div>
     <div id="results" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
     <div id="panel"></div>
@@ -306,6 +321,7 @@ function mountWidget() {
   const quickBtn = card.querySelector<HTMLButtonElement>("#quick")!;
   const suggestBtn = card.querySelector<HTMLButtonElement>("#suggest")!;
   const draftBtn = card.querySelector<HTMLButtonElement>("#draft")!;
+  const markBtn = card.querySelector<HTMLButtonElement>("#markApplied")!;
   const resultsEl = card.querySelector<HTMLDivElement>("#results")!;
   const panelEl = card.querySelector<HTMLDivElement>("#panel")!;
   const embChk = card.querySelector<HTMLInputElement>("#emb")!;
@@ -318,7 +334,7 @@ function mountWidget() {
   const reflectEmb = () => { embLabel.textContent = embChk.checked ? "Add relevant skills (honesty off)" : "Strict to my CV (honesty on)"; };
   chrome.storage?.local.get("sasaEmbellish").then((s) => { embChk.checked = s?.sasaEmbellish === true; reflectEmb(); }).catch(() => reflectEmb());
   embChk.addEventListener("change", () => { reflectEmb(); chrome.storage?.local.set({ sasaEmbellish: embChk.checked }); });
-  const busy = (on: boolean) => { tailorBtn.disabled = on; quickBtn.disabled = on; suggestBtn.disabled = on; draftBtn.disabled = on; };
+  const busy = (on: boolean) => { tailorBtn.disabled = on; quickBtn.disabled = on; suggestBtn.disabled = on; draftBtn.disabled = on; markBtn.disabled = on; };
 
   // Show the detected job so the user can confirm the widget mapped the right one.
   // (Click to re-detect on SPA pages that swap the role without a reload.)
@@ -543,6 +559,20 @@ function mountWidget() {
       renderDraft(resp.data);
     } catch { setStatus("Could not draft. Try again."); }
     finally { busy(false); }
+  });
+
+  // "I applied, mark it" — after the user fills/submits the form themselves, record
+  // the role as applied so it shows on the dashboard (charges 1 credit).
+  markBtn.addEventListener("click", async () => {
+    const job = scrapeJob();
+    const url = job.url || location.href;
+    busy(true); setStatus("Marking as applied…");
+    try {
+      const resp = (await chrome.runtime.sendMessage({ type: "markApplied", payload: { title: job.title || "Role", company: job.company || "Company", url } })) as { ok: boolean; error?: string };
+      if (resp?.ok) { setStatus("Marked as applied. It shows in your dashboard now."); markBtn.textContent = "Applied"; }
+      else setStatus(resp?.error || "Could not mark applied.");
+    } catch { setStatus("Could not mark applied. Try again."); }
+    finally { busy(false); if (markBtn.textContent === "Applied") markBtn.disabled = true; }
   });
 
   // Render Download CV / Download cover / Fill once tailoring is ready.

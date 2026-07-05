@@ -9,11 +9,11 @@ import { logUsage } from "@/lib/anthropic-usage";
 const MAX_CANDIDATES = 300; // jobs scored per run (batched, so ~30 LLM calls)
 const BATCH_SIZE = 10; // jobs per Haiku call
 export const MATCH_THRESHOLD = 60; // surface + auto-tailor at/above this score
-// Top matches auto-prepared for review per run (users without Telegram). Each auto-
-// tailor is ~3 Haiku calls, so this is the single biggest background cost. Kept low
-// by default; set AUTO_TAILOR_LIMIT=0 to disable entirely (matches still surface, and
-// the user tailors on demand from the dashboard).
-const AUTO_TAILOR_LIMIT = Math.max(0, Number(process.env.AUTO_TAILOR_LIMIT ?? 3));
+// Top matches auto-prepared for review per run. DISABLED by default (0): we never
+// tailor a CV until the user clicks Apply, so credits/LLM spend are only used on
+// roles the user actually chose. Matches still surface for the user to review; set
+// AUTO_TAILOR_LIMIT to a positive number only to re-enable proactive tailoring.
+const AUTO_TAILOR_LIMIT = Math.max(0, Number(process.env.AUTO_TAILOR_LIMIT ?? 0));
 
 const STOPWORDS = new Set([
   "with", "team", "lead", "senior", "junior", "staff", "and", "the", "for",

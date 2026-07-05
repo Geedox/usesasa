@@ -22,10 +22,28 @@ export type QueuedApp = {
 export type SubmitResult = "submitted" | "needs_user" | "failed";
 
 export type Stats = {
+  userId?: string;
   balance: number;
   counts: { ready: number; submitted: number; needsYou: number; failed: number; skipped: number };
   recent: { company: string; title: string; state: string; at: string | null }[];
 };
+
+// Mark a job the user applied to in their own browser (quick fill / tailor + submit)
+// as applied, so the dashboard reflects it. Charges 1 credit.
+export async function markApplied(cfg: Config, payload: { title: string; company: string; url: string }): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${cfg.baseUrl}/api/extension/mark-applied`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: (data as { error?: string }).error || `error ${res.status}` };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "network error" };
+  }
+}
 
 export async function fetchStats(cfg: Config): Promise<Stats | null> {
   try {

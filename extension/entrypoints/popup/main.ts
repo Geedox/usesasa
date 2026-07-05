@@ -53,6 +53,9 @@ async function refreshCounts(): Promise<boolean> {
     message("Could not reach the app, or the token is invalid. Check the App URL and token in Settings.", "error");
     return false;
   }
+  // Remember which user this token is paired to, so the content script can reset the
+  // extension if a different user signs in on usesasa.xyz in this browser.
+  if (stats.userId) await chrome.storage.local.set({ pairedUser: stats.userId });
   el("s-ready").textContent = String(stats.counts.ready);
   el("s-submitted").textContent = String(stats.counts.submitted);
   el("s-credits").textContent = String(stats.balance);

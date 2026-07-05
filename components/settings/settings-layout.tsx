@@ -67,6 +67,7 @@ export function SettingsLayout({
   referral,
   referralShareUrl,
   defaultBilling,
+  showSubscription,
   paymentsEnabled,
   initialSection,
 }: {
@@ -91,6 +92,7 @@ export function SettingsLayout({
   referral: ReferralSummary;
   referralShareUrl: string;
   defaultBilling: "credits" | "subscription";
+  showSubscription: boolean;
   paymentsEnabled: boolean;
   initialSection?: string;
 }) {
@@ -144,7 +146,7 @@ export function SettingsLayout({
             <EmailIntegrations hasScope={gmailHasScope} enabled={gmailEnabled} email={gmailEmail} notifications={emailNotifications} />
           )}
           {section === "billing" && (
-            <BillingPanel credits={credits} packs={packs} plans={plans} entitlement={entitlement} transactions={transactions} txPage={txPage} txTotalPages={txTotalPages} defaultBilling={defaultBilling} paymentsEnabled={paymentsEnabled} />
+            <BillingPanel credits={credits} packs={packs} plans={plans} entitlement={entitlement} transactions={transactions} txPage={txPage} txTotalPages={txTotalPages} defaultBilling={defaultBilling} showSubscription={showSubscription} paymentsEnabled={paymentsEnabled} />
           )}
           {section === "referrals" && <ReferralsPanel referral={referral} shareUrl={referralShareUrl} />}
           {section === "account" && <AccountPanel email={email} />}
@@ -332,6 +334,7 @@ function BillingPanel({
   txPage,
   txTotalPages,
   defaultBilling,
+  showSubscription,
   paymentsEnabled,
 }: {
   credits: number;
@@ -342,10 +345,11 @@ function BillingPanel({
   txPage: number;
   txTotalPages: number;
   defaultBilling: "credits" | "subscription";
+  showSubscription: boolean;
   paymentsEnabled: boolean;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"credits" | "subscription">(defaultBilling);
+  const [mode, setMode] = useState<"credits" | "subscription">(showSubscription ? defaultBilling : "credits");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -373,15 +377,17 @@ function BillingPanel({
     <div className="rounded-xl border border-foreground/10 bg-background p-6">
       <PanelHeader icon={CreditCard} title="Plans & Billing" desc="Pay for the applications, not the tool" />
 
-      {/* Region toggle */}
-      <div className="flex gap-2 mb-6">
-        <button onClick={() => setMode("credits")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "credits" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
-          Nigeria (credits)
-        </button>
-        <button onClick={() => setMode("subscription")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "subscription" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
-          International (subscription)
-        </button>
-      </div>
+      {/* Region toggle — only when subscriptions are available (non-Nigerian users). */}
+      {showSubscription && (
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => setMode("credits")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "credits" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
+            Credits
+          </button>
+          <button onClick={() => setMode("subscription")} className={`rounded-full px-4 py-1.5 text-sm cursor-pointer transition-colors ${mode === "subscription" ? "bg-foreground text-background" : "border border-foreground/15 text-muted-foreground hover:text-foreground"}`}>
+            Subscription
+          </button>
+        </div>
+      )}
 
       {mode === "credits" ? (
         <>

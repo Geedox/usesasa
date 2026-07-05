@@ -40,9 +40,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   const onboarding = (prefs?.onboarding as {
     applicationSettings?: Partial<ApplySettings>;
-    comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
+    comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string; salaryCurrency?: string };
     emailNotifications?: Partial<EmailNotifications> & { gmailEnabled?: boolean };
     contact?: { linkedin?: string; github?: string; portfolio?: string; twitter?: string; facebook?: string; instagram?: string };
+    location?: { country?: string };
   } | null) ?? {};
   const apply: ApplySettings = { ...DEFAULT_APPLY, ...(onboarding.applicationSettings ?? {}) };
   const contactLinks = {
@@ -74,7 +75,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const hdrs = await headers();
   const country = (hdrs.get("x-vercel-ip-country") || hdrs.get("cf-ipcountry") || "").toUpperCase();
   const [subscribed, entitlement] = await Promise.all([isSubscriber(session.user.id), getEntitlement(session.user.id)]);
-  const defaultBilling: "credits" | "subscription" = subscribed ? "subscription" : country && country !== "NG" ? "subscription" : "credits";
+  // Nigerian users only see credit packs. Treat as Nigerian if the IP says NG, the
+  // onboarding country is Nigeria, or they chose NGN. International users (or anyone
+  // already subscribed) can see subscriptions.
+  const isNigerian =
+    country === "NG" ||
+    /nigeria/i.test(onboarding.location?.country ?? "") ||
+    (onboarding.comp?.salaryCurrency ?? "") === "NGN";
+  const showSubscription = subscribed || !isNigerian;
+  const defaultBilling: "credits" | "subscription" = subscribed ? "subscription" : showSubscription && country && country !== "NG" ? "subscription" : "credits";
 
   const [txCountRow] = await db.select({ n: count() }).from(creditLedger).where(eq(creditLedger.userId, session.user.id));
   const txTotalPages = Math.max(1, Math.ceil((txCountRow?.n ?? 0) / TX_PAGE_SIZE));
@@ -114,6 +123,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       referral={referral}
       referralShareUrl={referralShareUrl}
       defaultBilling={defaultBilling}
+      showSubscription={showSubscription}
       paymentsEnabled={paystackConfigured()}
       initialSection={tab}
     />
