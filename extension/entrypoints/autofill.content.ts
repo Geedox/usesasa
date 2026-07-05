@@ -196,24 +196,10 @@ export default defineContentScript({
     // mounts here so the user gets match score / tailor / suggest on ATS posting pages.
     // The scripts use different message types, so they don't collide.
 
-    let mounted = false;
-    const tryMount = () => {
-      if (mounted) return true;
-      if (looksLikeJobPage()) { mountWidget(); mounted = true; return true; }
-      return false;
-    };
-    // Keep checking for a while: many boards render late or are SPAs, and the
-    // content (Apply button, headings) we key off may not exist on first paint.
-    if (!tryMount()) {
-      let tries = 0;
-      const iv = setInterval(() => { if (tryMount() || ++tries > 20) clearInterval(iv); }, 1500);
-    }
-    // SPA route changes (clicking into a job from a list) don't reload the page, so
-    // re-check after navigation if we haven't mounted yet.
-    let lastUrl = location.href;
-    setInterval(() => {
-      if (location.href !== lastUrl) { lastUrl = location.href; if (!mounted) tryMount(); }
-    }, 1500);
+    // Always mount, but start MINIMIZED (a small bubble) on pages that don't look
+    // like a job page. On a detected job page it auto-expands. The user can drag the
+    // bubble anywhere and open it manually if a job page slips past detection.
+    mountWidget();
   },
 });
 
@@ -390,43 +376,65 @@ function mountWidget() {
   // SPA swaps the detail pane, without needing a manual refresh.
   setInterval(showJob, 1500);
 
-  // Make the widget draggable by its header.
+  // Drag helper: a drag on the handle repositions the whole widget; a tap (no real
+  // movement) fires onTap. Used by the card header and the collapsed bubble, so the
+  // user can move either around the browser.
   const head = card.querySelector<HTMLDivElement>("#head")!;
-  let dragging = false, startX = 0, startY = 0, baseX = 0, baseY = 0;
-  head.addEventListener("pointerdown", (e) => {
-    dragging = true;
-    const r = root.getBoundingClientRect();
-    baseX = r.left; baseY = r.top; startX = e.clientX; startY = e.clientY;
-    root.style.left = `${baseX}px`; root.style.top = `${baseY}px`; root.style.right = "auto"; root.style.bottom = "auto";
-    try { head.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-  });
-  head.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const nx = Math.max(4, Math.min(window.innerWidth - 80, baseX + (e.clientX - startX)));
-    const ny = Math.max(4, Math.min(window.innerHeight - 40, baseY + (e.clientY - startY)));
-    root.style.left = `${nx}px`; root.style.top = `${ny}px`;
-  });
-  const endDrag = (e: PointerEvent) => { if (dragging) { dragging = false; try { head.releasePointerCapture(e.pointerId); } catch { /* ignore */ } } };
-  head.addEventListener("pointerup", endDrag);
-  head.addEventListener("pointercancel", endDrag);
+  const enableDrag = (handle: HTMLElement, onTap?: () => void) => {
+    let dragging = false, moved = false, sx = 0, sy = 0, bx = 0, by = 0;
+    handle.addEventListener("pointerdown", (e) => {
+      dragging = true; moved = false;
+      const r = root.getBoundingClientRect();
+      bx = r.left; by = r.top; sx = e.clientX; sy = e.clientY;
+      root.style.left = `${bx}px`; root.style.top = `${by}px`; root.style.right = "auto"; root.style.bottom = "auto";
+      try { handle.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      if (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4) moved = true;
+      const nx = Math.max(4, Math.min(window.innerWidth - 44, bx + (e.clientX - sx)));
+      const ny = Math.max(4, Math.min(window.innerHeight - 44, by + (e.clientY - sy)));
+      root.style.left = `${nx}px`; root.style.top = `${ny}px`;
+    });
+    const end = (e: PointerEvent) => {
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+      if (!moved && onTap) onTap();
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  };
+  enableDrag(head);
 
-  // Minimize / expand. Minimized collapses to a small "Sasa" bubble; the state
-  // persists across pages so once the user tucks it away it stays away until reopened.
+  // Minimize / expand + the collapsed bubble. The minimized state is driven by
+  // job-page detection until the user manually toggles it. On a job page it expands;
+  // elsewhere it stays a small draggable bubble the user can tap open anytime.
   const minBtn = card.querySelector<HTMLButtonElement>("#min")!;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.title = "Open Sasa";
+  bubble.title = "Open Sasa (drag to move)";
   bubble.innerHTML = `<span class="dot"></span>Sasa`;
   shadow.append(bubble);
-  const setMinimized = (min: boolean, persist = true) => {
+  let userToggled = false;
+  const setMinimized = (min: boolean) => {
     card.style.display = min ? "none" : "";
     bubble.style.display = min ? "flex" : "none";
-    if (persist) chrome.storage?.local.set({ sasaWidgetMinimized: min }).catch(() => {});
   };
   minBtn.addEventListener("pointerdown", (e) => e.stopPropagation()); // don't start a drag
-  minBtn.addEventListener("click", (e) => { e.stopPropagation(); setMinimized(true); });
-  bubble.addEventListener("click", () => setMinimized(false));
-  chrome.storage?.local.get("sasaWidgetMinimized").then((s) => setMinimized(s?.sasaWidgetMinimized === true, false)).catch(() => {});
+  minBtn.addEventListener("click", (e) => { e.stopPropagation(); userToggled = true; setMinimized(true); });
+  enableDrag(bubble, () => { userToggled = true; setMinimized(false); });
+
+  // Auto-decide minimized vs open from detection, until the user takes over. Re-check
+  // for a while (boards render late) and reset the override on SPA navigation.
+  const applyDetection = () => { if (!userToggled) setMinimized(!looksLikeJobPage()); };
+  applyDetection();
+  let detChecks = 0;
+  const detIv = setInterval(() => { applyDetection(); if (++detChecks > 20) clearInterval(detIv); }, 1500);
+  let lastDetUrl = location.href;
+  setInterval(() => {
+    if (location.href !== lastDetUrl) { lastDetUrl = location.href; userToggled = false; applyDetection(); }
+  }, 1500);
 
   // Render a drafted email/DM with copy buttons (user copies + sends themselves).
   const renderDraft = (draft: DraftedMessage) => {
