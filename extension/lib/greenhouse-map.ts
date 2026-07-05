@@ -10,6 +10,14 @@ export type FieldRole =
   | "linkedin"
   | "github"
   | "portfolio"
+  | "twitter"
+  | "facebook"
+  | "instagram"
+  | "address"
+  | "city"
+  | "state"
+  | "postalCode"
+  | "country"
   | "resume"
   | "coverLetter"
   | null;
@@ -35,6 +43,11 @@ export function classifyField(meta: FieldMeta): FieldRole {
   if (ac === "name") return "fullName";
   if (ac === "email") return "email";
   if (ac === "tel" || ac.startsWith("tel-")) return "phone";
+  if (ac === "street-address" || ac.startsWith("address-line")) return "address";
+  if (ac === "address-level2") return "city";
+  if (ac === "address-level1") return "state";
+  if (ac === "postal-code") return "postalCode";
+  if (ac === "country" || ac === "country-name") return "country";
 
   if (type === "file") {
     if (/cover\s*letter/.test(hay)) return "coverLetter";
@@ -50,7 +63,16 @@ export function classifyField(meta: FieldMeta): FieldRole {
   if (type === "tel" || /phone|mobile|\btel\b/.test(hay)) return "phone";
   if (/linkedin/.test(hay)) return "linkedin";
   if (/github/.test(hay)) return "github";
+  if (/twitter|x\s*handle|x\.com/.test(hay)) return "twitter";
+  if (/facebook|fb\.com/.test(hay)) return "facebook";
+  if (/instagram|insta(gram)?\b/.test(hay)) return "instagram";
   if (/portfolio|personal\s*(web)?site|\bwebsite\b/.test(hay)) return "portfolio";
+  // Address block (after email/phone/links so those win their fields first).
+  if (/postal|\bzip\b|post\s*code/.test(hay)) return "postalCode";
+  if (/\bcity\b|town/.test(hay)) return "city";
+  if (/\bstate\b|province|region/.test(hay)) return "state";
+  if (/\bcountry\b|nationality/.test(hay)) return "country";
+  if (/street|address\s*line|mailing\s*address|home\s*address|^\s*address\s*$/.test(hay)) return "address";
   if (/cover\s*letter/.test(hay)) return "coverLetter";
   return null;
 }
@@ -63,6 +85,14 @@ export type FillData = {
   linkedin: string;
   github: string;
   portfolio: string;
+  twitter?: string;
+  facebook?: string;
+  instagram?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
 };
 
 // The text value to type for a classified role (file roles handled separately).
@@ -76,6 +106,14 @@ export function valueForRole(role: FieldRole, data: FillData): string | null {
     case "linkedin": return data.linkedin;
     case "github": return data.github;
     case "portfolio": return data.portfolio;
+    case "twitter": return data.twitter ?? null;
+    case "facebook": return data.facebook ?? null;
+    case "instagram": return data.instagram ?? null;
+    case "address": return data.address ?? null;
+    case "city": return data.city ?? null;
+    case "state": return data.state ?? null;
+    case "postalCode": return data.postalCode ?? null;
+    case "country": return data.country ?? null;
     default: return null;
   }
 }

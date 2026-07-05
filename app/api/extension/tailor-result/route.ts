@@ -28,7 +28,12 @@ export async function GET(req: Request) {
   const profileRow = await db.query.profiles.findFirst({ where: and(eq(profiles.userId, user.id), eq(profiles.isCurrent, true)) });
   const profile = profileRow?.parsedData ? normalizeProfile(profileRow.parsedData) : null;
   const prefsRow = await db.query.preferences.findFirst({ where: eq(preferences.userId, user.id) });
-  const contact = (prefsRow?.onboarding as { contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string } } | null)?.contact ?? {};
+  const onboarding = (prefsRow?.onboarding as {
+    contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string; twitter?: string; facebook?: string; instagram?: string };
+    location?: { address?: string; city?: string; state?: string; postalCode?: string; country?: string };
+  } | null) ?? {};
+  const contact = onboarding.contact ?? {};
+  const loc = onboarding.location ?? {};
   const [firstName, ...rest] = (profile?.full_name ?? user.name ?? "").trim().split(/\s+/);
 
   const pdf = await generateResumePdf(app.id);
@@ -43,6 +48,14 @@ export async function GET(req: Request) {
       linkedin: profile?.links.linkedin || contact.linkedin || "",
       github: profile?.links.github || contact.github || "",
       portfolio: profile?.links.portfolio || contact.portfolio || "",
+      twitter: contact.twitter || "",
+      facebook: contact.facebook || "",
+      instagram: contact.instagram || "",
+      address: loc.address || "",
+      city: loc.city || profile?.location?.city || "",
+      state: loc.state || "",
+      postalCode: loc.postalCode || "",
+      country: loc.country || profile?.location?.country || "",
     },
     coverLetter: app.coverLetterText ?? "",
     answers: (app.customAnswers as Record<string, string> | null) ?? {},

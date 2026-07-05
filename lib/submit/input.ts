@@ -93,6 +93,14 @@ export type SubmitContext = {
     linkedin: string;
     github: string;
     portfolio: string;
+    twitter: string;
+    facebook: string;
+    instagram: string;
+    address: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
   };
   coverLetter: string;
   answers: Record<string, string>;
@@ -140,8 +148,8 @@ export async function buildSubmitContext(applicationId: string): Promise<SubmitC
   const prefsRow = await db.query.preferences.findFirst({ where: eq(preferences.userId, user.id) });
   const onboarding = (prefsRow?.onboarding as {
     applicationSettings?: { allowEmbellishment?: boolean };
-    contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string };
-    location?: { city?: string; country?: string; state?: string };
+    contact?: { phone?: string; linkedin?: string; github?: string; portfolio?: string; twitter?: string; facebook?: string; instagram?: string };
+    location?: { address?: string; city?: string; country?: string; state?: string; postalCode?: string };
     workEligibility?: { authorizedCountries?: string[]; needsSponsorship?: boolean; sponsorshipCountries?: string[] };
     comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
   } | null) ?? {};
@@ -149,6 +157,7 @@ export async function buildSubmitContext(applicationId: string): Promise<SubmitC
   const embellish = onboarding.applicationSettings?.allowEmbellishment === true;
 
   const [firstName, ...rest] = (profile.full_name ?? user.name ?? "").trim().split(/\s+/);
+  const loc = onboarding.location ?? {};
   const fields = {
     firstName: firstName ?? "",
     lastName: rest.join(" "),
@@ -157,6 +166,14 @@ export async function buildSubmitContext(applicationId: string): Promise<SubmitC
     linkedin: profile.links.linkedin || contact.linkedin || "",
     github: profile.links.github || contact.github || "",
     portfolio: profile.links.portfolio || contact.portfolio || "",
+    twitter: contact.twitter || "",
+    facebook: contact.facebook || "",
+    instagram: contact.instagram || "",
+    address: loc.address || "",
+    city: loc.city || profile.location?.city || "",
+    state: loc.state || "",
+    postalCode: loc.postalCode || "",
+    country: loc.country || profile.location?.country || "",
   };
 
   const applicant = {

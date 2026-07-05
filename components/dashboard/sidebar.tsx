@@ -9,7 +9,6 @@ import { FeedbackButton } from "@/components/dashboard/feedback-button";
 import {
   LayoutGrid,
   Search,
-  Inbox,
   KanbanSquare,
   CalendarClock,
   GraduationCap,
@@ -24,7 +23,8 @@ import {
 const nav = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutGrid },
   { name: "Browse jobs", href: "/dashboard/browse", icon: Search },
-  { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+  // Inbox is hidden until Google approves the Gmail scope. Re-enable when cleared.
+  // { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
   { name: "Tracker", href: "/dashboard/tracker", icon: KanbanSquare },
   { name: "Interview prep", href: "/dashboard/interview-prep", icon: CalendarClock },
   { name: "Profile", href: "/dashboard/profile", icon: User },
@@ -51,8 +51,9 @@ export function DashboardSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  // Insert the Mentor link after Interview prep (index 3 now that Inbox is hidden).
   const navItems = isMentor
-    ? [...nav.slice(0, 5), { name: "Mentor", href: "/dashboard/mentor", icon: GraduationCap }, ...nav.slice(5)]
+    ? [...nav.slice(0, 4), { name: "Mentor", href: "/dashboard/mentor", icon: GraduationCap }, ...nav.slice(4)]
     : nav;
 
   return (

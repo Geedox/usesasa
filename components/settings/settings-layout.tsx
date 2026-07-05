@@ -8,6 +8,7 @@ import { ConnectExtension } from "@/components/settings/connect-extension";
 import { ConnectTelegram } from "@/components/settings/connect-telegram";
 import { ProfileDetails, type CompDetails } from "@/components/settings/profile-details";
 import { WorkPreferences, type WorkPrefs } from "@/components/settings/work-preferences";
+import { ContactLinksEditor, type ContactLinks } from "@/components/settings/contact-links";
 import { EmailIntegrations, type EmailNotifications } from "@/components/settings/email-integrations";
 import { ReferralsPanel, type ReferralSummary } from "@/components/settings/referrals-panel";
 
@@ -48,6 +49,7 @@ export function SettingsLayout({
   apply: initialApply,
   comp,
   workPrefs,
+  contactLinks,
   extensionConnected,
   telegramConnected,
   email,
@@ -71,6 +73,7 @@ export function SettingsLayout({
   apply: ApplySettings;
   comp: CompDetails;
   workPrefs: WorkPrefs;
+  contactLinks: ContactLinks;
   extensionConnected: boolean;
   telegramConnected: boolean;
   email: string;
@@ -125,7 +128,7 @@ export function SettingsLayout({
 
         {/* Right panel */}
         <div className="min-w-0">
-          {section === "apply" && <ApplyPanel initial={initialApply} comp={comp} workPrefs={workPrefs} />}
+          {section === "apply" && <ApplyPanel initial={initialApply} comp={comp} workPrefs={workPrefs} contactLinks={contactLinks} />}
           {section === "integrations" && (
             <div className="flex flex-col gap-6">
               <ConnectExtension />
@@ -176,7 +179,7 @@ const COVER_OPTS: { value: Opt; title: string; desc: string }[] = [
   { value: "aggressive", title: "Aggressive", desc: "Rewrite to closely match the job description" },
 ];
 
-function ApplyPanel({ initial, comp, workPrefs }: { initial: ApplySettings; comp: CompDetails; workPrefs: WorkPrefs }) {
+function ApplyPanel({ initial, comp, workPrefs, contactLinks }: { initial: ApplySettings; comp: CompDetails; workPrefs: WorkPrefs; contactLinks: ContactLinks }) {
   const [s, setS] = useState<ApplySettings>(initial);
 
   const update = (patch: Partial<ApplySettings>) => {
@@ -189,6 +192,10 @@ function ApplyPanel({ initial, comp, workPrefs }: { initial: ApplySettings; comp
       <PanelHeader icon={SlidersHorizontal} title="Apply Settings" desc="Configure how your applications are submitted" />
 
       <WorkPreferences initial={workPrefs} />
+
+      <div className="h-6" />
+
+      <ContactLinksEditor initial={contactLinks} />
 
       <div className="h-6" />
 
