@@ -42,8 +42,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     applicationSettings?: Partial<ApplySettings>;
     comp?: { salaryExpectation?: string; salaryPeriod?: string; noticePeriod?: string; yearsExperience?: string };
     emailNotifications?: Partial<EmailNotifications> & { gmailEnabled?: boolean };
+    contact?: { linkedin?: string; github?: string; portfolio?: string; twitter?: string; facebook?: string; instagram?: string };
   } | null) ?? {};
   const apply: ApplySettings = { ...DEFAULT_APPLY, ...(onboarding.applicationSettings ?? {}) };
+  const contactLinks = {
+    linkedin: onboarding.contact?.linkedin ?? "",
+    github: onboarding.contact?.github ?? "",
+    portfolio: onboarding.contact?.portfolio ?? "",
+    twitter: onboarding.contact?.twitter ?? "",
+    facebook: onboarding.contact?.facebook ?? "",
+    instagram: onboarding.contact?.instagram ?? "",
+  };
   const comp = {
     salaryExpectation: onboarding.comp?.salaryExpectation ?? "",
     salaryPeriod: onboarding.comp?.salaryPeriod ?? "year",
@@ -87,6 +96,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       apply={apply}
       comp={comp}
       workPrefs={{ arrangements: prefs?.workArrangements ?? [], internshipOnly: prefs?.internshipOnly ?? false }}
+      contactLinks={contactLinks}
       extensionConnected={Boolean(user?.extensionTokenHash)}
       telegramConnected={Boolean(user?.telegramChatId)}
       email={user?.email ?? session.user.email ?? ""}

@@ -12,7 +12,7 @@ type Opt = "off" | "honest" | "aggressive";
 
 type WizardData = {
   location: { address: string; city: string; postalCode: string; district: string; country: string; state: string };
-  contact: { phone: string; linkedin: string; github: string; portfolio: string; twitter: string; facebook: string; instagram: string };
+  contact: { phone: string; linkedin: string; github: string; portfolio: string };
   workEligibility: { authorizedCountries: string[]; needsSponsorship: boolean; sponsorshipCountries: string[] };
   workPrefs: { arrangements: string[]; internshipOnly: boolean };
   comp: { salaryExpectation: string; salaryCurrency: string; salaryPeriod: string; noticePeriod: string; yearsExperience: string };
@@ -31,7 +31,7 @@ type WizardData = {
 
 const initialData: WizardData = {
   location: { address: "", city: "", postalCode: "", district: "", country: "", state: "" },
-  contact: { phone: "", linkedin: "", github: "", portfolio: "", twitter: "", facebook: "", instagram: "" },
+  contact: { phone: "", linkedin: "", github: "", portfolio: "" },
   workEligibility: { authorizedCountries: [], needsSponsorship: false, sponsorshipCountries: [] },
   workPrefs: { arrangements: [], internshipOnly: false },
   comp: { salaryExpectation: "", salaryCurrency: "NGN", salaryPeriod: "year", noticePeriod: "", yearsExperience: "" },
@@ -464,21 +464,7 @@ export function OnboardingWizard({
                     <Input value={data.contact.portfolio} placeholder="https://yourname.com"
                       onChange={(e) => set("contact", { ...data.contact, portfolio: e.target.value })} />
                   </Field>
-                  <div className="grid sm:grid-cols-2 gap-6">
-                    <Field label="X / Twitter · optional">
-                      <Input value={data.contact.twitter} placeholder="https://x.com/yourhandle"
-                        onChange={(e) => set("contact", { ...data.contact, twitter: e.target.value })} />
-                    </Field>
-                    <Field label="Instagram · optional">
-                      <Input value={data.contact.instagram} placeholder="https://instagram.com/yourhandle"
-                        onChange={(e) => set("contact", { ...data.contact, instagram: e.target.value })} />
-                    </Field>
-                  </div>
-                  <Field label="Facebook · optional">
-                    <Input value={data.contact.facebook} placeholder="https://facebook.com/yourhandle"
-                      onChange={(e) => set("contact", { ...data.contact, facebook: e.target.value })} />
-                  </Field>
-                  <p className="text-xs text-muted-foreground">Asked on basically every Greenhouse, Lever, and Ashby application. GitHub and portfolio help for engineering and design roles. Social links are used only when a form asks for them.</p>
+                  <p className="text-xs text-muted-foreground">Asked on basically every Greenhouse, Lever, and Ashby application. GitHub and portfolio help for engineering and design roles.</p>
                 </div>
               </div>
             )}
