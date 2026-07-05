@@ -1,6 +1,6 @@
 import { defineBackground } from "wxt/utils/define-background";
 import { getConfig } from "@/lib/config";
-import { fetchQueue, report, answerQuestions, fetchProfile, tailorAdhoc, tailorResult, tailorLookup, suggestAnswers, draftMessage, matchScore, type QueuedApp, type SubmitResult, type AnswerQuestion } from "@/lib/api";
+import { fetchQueue, report, answerQuestions, fetchProfile, tailorAdhoc, tailorResult, tailorLookup, suggestAnswers, draftMessage, matchScore, markApplied, type QueuedApp, type SubmitResult, type AnswerQuestion } from "@/lib/api";
 import type { ScannedQuestion } from "@/lib/questions";
 
 export type FillMessage = {
@@ -248,6 +248,14 @@ export default defineBackground(() => {
         const cfg = await getConfig();
         if (!cfg.token) return sendResponse({ ok: false, error: "Connect Sasa in the popup first." });
         sendResponse(await tailorAdhoc(cfg, msg.payload as { title: string; company: string; jd: string; url: string; embellish?: boolean }));
+      })();
+      return true; // async
+    }
+    if (msg?.type === "markApplied") {
+      (async () => {
+        const cfg = await getConfig();
+        if (!cfg.token) return sendResponse({ ok: false, error: "Connect Sasa in the popup first." });
+        sendResponse(await markApplied(cfg, msg.payload as { title: string; company: string; url: string }));
       })();
       return true; // async
     }

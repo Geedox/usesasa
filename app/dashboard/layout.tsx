@@ -29,6 +29,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-[#f6f7f8]">
+      {/* Lets the Chrome extension detect a different signed-in user and reset itself. */}
+      <meta name="sasa-user" content={session.user.id} />
       <DashboardSidebar name={session.user.name ?? ""} email={session.user.email} credits={credits} isMentor={!!mentor} />
       <div className="flex-1 min-w-0">{children}</div>
     </div>

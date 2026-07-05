@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Loader2, Coins } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { notifyCreditsChanged } from "@/components/dashboard/credits-badge";
 
 export function DiscoverButton({ label = "Find jobs" }: { label?: string }) {
   const router = useRouter();
@@ -26,6 +27,7 @@ export function DiscoverButton({ label = "Find jobs" }: { label?: string }) {
         setLoading(false);
         return;
       }
+      notifyCreditsChanged(); // the scan charged 1 credit
     } catch {
       setLoading(false);
       return;

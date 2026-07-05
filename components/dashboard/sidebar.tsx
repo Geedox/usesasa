@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { FeedbackButton } from "@/components/dashboard/feedback-button";
+import { CreditsBadge } from "@/components/dashboard/credits-badge";
 import {
   LayoutGrid,
   Search,
@@ -119,7 +120,7 @@ export function DashboardSidebar({
         <div className="text-xs text-background/60 truncate mb-3">{email}</div>
         <div className="flex items-baseline justify-between">
           <span className="text-xs text-background/70">Credits</span>
-          <span className="font-display text-2xl">{credits}</span>
+          <CreditsBadge initial={credits} className="font-display text-2xl" />
         </div>
         <div className="text-[11px] text-background/50 mb-3">Tailor 1 · Submit 1 · Interview 24</div>
         <Link href="/dashboard/settings?tab=billing" className="block w-full text-center rounded-lg bg-background text-foreground text-sm py-2 cursor-pointer hover:bg-background/90">

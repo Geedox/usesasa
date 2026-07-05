@@ -51,5 +51,5 @@ export async function GET(req: Request) {
     at: (r.submittedAt ?? r.createdAt)?.toISOString() ?? null,
   }));
 
-  return NextResponse.json({ balance, counts, recent });
+  return NextResponse.json({ userId: user.id, balance, counts, recent });
 }
