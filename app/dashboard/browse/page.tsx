@@ -3,13 +3,13 @@ import Link from "next/link";
 import { getSession } from "@/lib/get-session";
 import { db } from "@/lib/db";
 import { matches as matchesTable, jobs, companies, applications } from "@/lib/db/schema";
-import { ApplyButton } from "@/components/dashboard/apply-button";
 import { AddYourOwn } from "@/components/dashboard/add-your-own";
-import { CompanyAvatar } from "@/components/dashboard/company-avatar";
-import { MatchRing } from "@/components/dashboard/match-ring";
+import { MatchCard } from "@/components/dashboard/match-card";
 import { BrowseFilters } from "@/components/dashboard/browse-filters";
 import { CreditGate } from "@/components/dashboard/credit-gate";
 import { belowCreditFloor } from "@/lib/can-use";
+import { cleanJobDescription } from "@/lib/ats/util";
+import { prefersManualApply } from "@/lib/submit/input";
 import { locationCondition, seniorityCondition, SENIORITY, workplaceCondition, WORKPLACE, sponsorCondition } from "@/lib/jobs/filters";
 
 const PAGE_SIZE = 20;
@@ -38,24 +38,6 @@ function statusCondition(key: string): SQL | undefined {
       return isNull(applications.id);
     default:
       return undefined;
-  }
-}
-
-function statusBadge(state: string | null): { label: string; cls: string } | null {
-  switch (state) {
-    case "submitted":
-      return { label: "Applied", cls: "bg-green-100 text-green-700" };
-    case "queued":
-    case "sending":
-      return { label: "In flight", cls: "bg-blue-100 text-blue-700" };
-    case "awaiting_review":
-      return { label: "Review", cls: "bg-amber-100 text-amber-800" };
-    case "needs_user":
-      return { label: "Needs you", cls: "bg-amber-100 text-amber-800" };
-    case "dismissed":
-      return { label: "Skipped", cls: "bg-foreground/[0.06] text-muted-foreground" };
-    default:
-      return null;
   }
 }
 
@@ -138,12 +120,15 @@ export default async function BrowsePage({
       location: jobs.location,
       remotePolicy: jobs.remotePolicy,
       postedAt: jobs.postedAt,
+      rawJd: jobs.rawJd,
+      source: jobs.source,
       company: companies.name,
       logoUrl: companies.logoUrl,
       score: matchesTable.score,
       reasons: matchesTable.reasons,
       appId: applications.id,
       appState: applications.state,
+      appVia: applications.submittedVia,
     })
     .from(matchesTable)
     .innerJoin(jobs, eq(matchesTable.jobId, jobs.id))
@@ -195,35 +180,27 @@ export default async function BrowsePage({
         {/* First card: add your own career page */}
         <AddYourOwn variant="card" />
 
-        {rows.map((m) => {
-          const badge = statusBadge(m.appState);
-          return (
-            <div key={m.id} className="rounded-xl border border-foreground/10 bg-background p-5 flex flex-col min-h-[200px]">
-              <div className="flex items-start justify-between mb-4">
-                <div className="text-xs text-muted-foreground">
-                  <div>{m.location || (m.remotePolicy === "remote" ? "Remote" : "")}</div>
-                  <div>{timeAgo(m.postedAt)}</div>
-                </div>
-                <MatchRing value={m.score} />
-              </div>
-              <h3 className="font-display text-xl tracking-tight mb-3 leading-snug line-clamp-2">{m.title}</h3>
-              <p className="text-sm text-muted-foreground mb-5 line-clamp-3">{(m.reasons as { reason?: string } | null)?.reason}</p>
-              <div className="flex items-center justify-between gap-2 mt-auto pt-2">
-                <span className="flex items-center gap-2 min-w-0">
-                  <CompanyAvatar name={m.company} logoUrl={m.logoUrl} size={28} />
-                  <span className="text-sm font-medium truncate">{m.company}</span>
-                </span>
-                {badge ? (
-                  <Link href={m.appId ? `/dashboard/applications/${m.appId}` : "#"} className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${badge.cls}`}>
-                    {badge.label}
-                  </Link>
-                ) : (
-                  <ApplyButton jobId={m.id} />
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {rows.map((m) => (
+          <MatchCard
+            key={m.id}
+            card={{
+              id: m.id,
+              title: m.title,
+              location: m.location ?? "",
+              remotePolicy: m.remotePolicy,
+              postedAgo: timeAgo(m.postedAt),
+              company: m.company,
+              logoUrl: m.logoUrl,
+              score: m.score,
+              reason: (m.reasons as { reason?: string } | null)?.reason ?? "",
+              locationTag: (m.reasons as { tag?: string } | null)?.tag ?? "",
+              appState: m.appState,
+              appVia: m.appVia,
+              description: cleanJobDescription(m.rawJd),
+              manualApply: prefersManualApply(m.source),
+            }}
+          />
+        ))}
       </div>
 
       {rows.length === 0 && (

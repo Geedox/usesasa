@@ -88,6 +88,7 @@ Produce, as JSON only:
 Rules (critical):
 - ALIGN to this role: lead the summary and skills with the candidate's genuine strengths that match the role's responsibilities and required skills, and mirror the job's own terminology where it is truthful. Rewrite the bullets that are most relevant to the responsibilities first, framing real work in the language of this role. Do not bury the relevant experience.
 - Always set "originalTitle" to the candidate's exact title for that role.
+- "experience" MUST include EVERY role the candidate lists in CANDIDATE (same companies and dates), each with rewritten bullets. Never omit a role and never return an empty experience array, even when applying to an internship. If the candidate has projects but few jobs, still include the roles they do have.
 - "summary": rewrite the candidate's summary to align with this role and its keywords. Keep it true to their actual experience.
 - "skills": choose from the candidate's skills the ones most relevant to this job and order them by relevance${opts.embellish ? ", and you may add job-relevant skills the candidate did not list" : "; do NOT add skills the candidate did not list"}.
 ${
@@ -114,25 +115,58 @@ Return ONLY the JSON object.`;
     // for bullet rewriting / cover letters. Tailoring is included (not billed), so
     // keeping its marginal cost low is what makes the credit model scalable.
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 3000,
+    max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
   logUsage("tailor.generate", msg);
   const textPart = msg.content.find((c) => c.type === "text");
   const raw = textPart && "text" in textPart ? textPart.text : "";
   const json = raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
-  const out = JSON.parse(json) as TailoredOutput;
+  const parsed = JSON.parse(json) as Partial<TailoredOutput>;
 
-  // Deterministic no-dash safety net (the prompt also forbids dashes).
-  out.summary = stripDashes(out.summary ?? "");
-  out.skills = Array.isArray(out.skills) ? out.skills.map(stripDashes).filter(Boolean) : [];
-  out.coverLetter = stripDashes(out.coverLetter);
-  out.answers.whyCompany = stripDashes(out.answers.whyCompany);
-  out.answers.whyRole = stripDashes(out.answers.whyRole);
-  out.answers.recentProject = stripDashes(out.answers.recentProject);
-  out.experience = out.experience.map((e) => ({
-    ...e,
-    rewrittenBullets: e.rewrittenBullets.map(stripDashes),
+  // Rebuild the candidate's real experience straight from their profile (original
+  // bullets), used as a fallback below.
+  const realExperience = p.experience.map((e) => ({
+    company: e.company,
+    title: e.title,
+    originalTitle: e.title,
+    rewrittenBullets: (e.bullets ?? []).filter(Boolean),
   }));
+
+  const out: TailoredOutput = {
+    summary: stripDashes(parsed.summary ?? p.summary ?? ""),
+    skills: Array.isArray(parsed.skills) && parsed.skills.length
+      ? parsed.skills.map(stripDashes).filter(Boolean)
+      : p.skills.slice(0, 20),
+    // The model sometimes drops the experience array (or truncates it). Never ship a
+    // resume with no experience when the candidate actually has some — fall back to
+    // their real roles, and backfill bullets per role from the profile if missing.
+    experience: [],
+    coverLetter: stripDashes(parsed.coverLetter ?? ""),
+    answers: {
+      whyCompany: stripDashes(parsed.answers?.whyCompany ?? ""),
+      whyRole: stripDashes(parsed.answers?.whyRole ?? ""),
+      recentProject: stripDashes(parsed.answers?.recentProject ?? ""),
+    },
+  };
+
+  const modelExp = Array.isArray(parsed.experience) ? parsed.experience.filter((e) => e && e.company) : [];
+  if (modelExp.length === 0 && realExperience.length > 0) {
+    console.warn(`[tailor] model returned no experience for "${job.title}"; using the candidate's real roles`);
+    out.experience = realExperience.map((e) => ({ ...e, rewrittenBullets: e.rewrittenBullets.map(stripDashes) }));
+  } else {
+    out.experience = modelExp.map((e) => {
+      const bullets = Array.isArray(e.rewrittenBullets) && e.rewrittenBullets.length
+        ? e.rewrittenBullets
+        : realExperience.find((r) => r.company === e.company)?.rewrittenBullets ?? [];
+      return {
+        company: e.company,
+        title: stripDashes(e.title || e.originalTitle || ""),
+        originalTitle: e.originalTitle || e.title || "",
+        rewrittenBullets: bullets.map(stripDashes).filter(Boolean),
+      };
+    });
+  }
+
   return out;
 }
