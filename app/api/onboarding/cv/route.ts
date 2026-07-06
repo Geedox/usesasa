@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getSession } from "@/lib/get-session";
 import { uploadCv } from "@/lib/cloudinary";
 import { db } from "@/lib/db";
@@ -16,7 +17,13 @@ export async function POST(req: Request) {
 
   const form = await req.formData();
   const file = form.get("file");
-  // referralCode is optional and not yet persisted (no field); accept and ignore for now.
+
+  // A manually-typed referral code goes into the same sasa_ref cookie the ?ref= link
+  // uses, so it's redeemed for the referrer when this user finishes onboarding.
+  const referralCode = form.get("referralCode");
+  if (typeof referralCode === "string" && /^[A-Za-z0-9]{4,12}$/.test(referralCode.trim())) {
+    (await cookies()).set("sasa_ref", referralCode.trim().toUpperCase(), { maxAge: 60 * 60 * 24 * 30, path: "/", sameSite: "lax" });
+  }
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided." }, { status: 400 });

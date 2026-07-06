@@ -37,10 +37,11 @@ export async function consumeSignupReferral(referredUserId: string, rawCode: str
   if (!code) return;
 
   const referrer = await db.query.users.findFirst({ where: eq(users.referralCode, code) });
-  if (!referrer || referrer.id === referredUserId) return; // invalid or self-referral
+  if (!referrer) { console.warn(`[referral] no user owns code "${code}" (referred=${referredUserId})`); return; }
+  if (referrer.id === referredUserId) { console.warn(`[referral] self-referral ignored (${code})`); return; }
 
   const existing = await db.query.referrals.findFirst({ where: eq(referrals.referredId, referredUserId) });
-  if (existing) return; // already referred
+  if (existing) { console.log(`[referral] ${referredUserId} already referred; skipping`); return; }
 
   const [row] = await db
     .insert(referrals)
@@ -50,6 +51,7 @@ export async function consumeSignupReferral(referredUserId: string, rawCode: str
   if (!row) return; // race: someone else inserted
 
   await addCredits(referrer.id, REFERRAL_REWARD, "referral_bonus", row.id);
+  console.log(`[referral] +${REFERRAL_REWARD} credits to ${referrer.id} for referring ${referredUserId} (code ${code})`);
 }
 
 // Called when a referred user buys a pack: award the referrer the ₦15k / ₦30k
