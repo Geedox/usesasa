@@ -16,6 +16,7 @@ const CAT_CLS: Record<string, string> = {
   bug: "bg-rose-50 text-rose-700",
   idea: "bg-sky-50 text-sky-700",
   praise: "bg-emerald-50 text-emerald-700",
+  pricing: "bg-violet-50 text-violet-700",
   other: "bg-foreground/[0.06] text-muted-foreground",
 };
 

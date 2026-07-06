@@ -9,6 +9,7 @@ import { ConnectTelegram } from "@/components/settings/connect-telegram";
 import { ProfileDetails, type CompDetails } from "@/components/settings/profile-details";
 import { WorkPreferences, type WorkPrefs } from "@/components/settings/work-preferences";
 import { ContactLinksEditor, type ContactLinks } from "@/components/settings/contact-links";
+import { MonthlyPricingPoll } from "@/components/settings/monthly-pricing-poll";
 import { EmailIntegrations, type EmailNotifications } from "@/components/settings/email-integrations";
 import { ReferralsPanel, type ReferralSummary } from "@/components/settings/referrals-panel";
 
@@ -460,6 +461,9 @@ function BillingPanel({
 
       {error && <p className="text-sm text-rose-600 mt-3">{error}</p>}
       {!paymentsEnabled && <p className="text-xs text-muted-foreground mt-3">Payments are not configured yet. Set PAYSTACK_SECRET_KEY to enable checkout.</p>}
+
+      {/* Monthly-billing appetite poll */}
+      <MonthlyPricingPoll />
 
       {/* Transaction history */}
       <div className="mt-8">
