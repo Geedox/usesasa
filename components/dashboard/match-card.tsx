@@ -103,7 +103,10 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
           </span>
           <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
             {status ? (
-              <span className={`rounded-lg px-3 py-1.5 text-sm font-medium ${status.cls}`}>{status.label}</span>
+              <>
+                <span className={`rounded-lg px-3 py-1.5 text-sm font-medium ${status.cls}`}>{status.label}</span>
+                {m.manualApply && m.appState === "submitted" && <ManualApplyButton jobId={m.id} applied />}
+              </>
             ) : (
               <>
                 <button className="rounded-lg border border-foreground/15 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 cursor-pointer">
@@ -156,14 +159,23 @@ export function MatchCard({ card: m }: { card: MatchCardData }) {
               </section>
             </div>
 
-            {!status && (
+            {/* Manual jobs always keep an action (apply, or reopen after applying).
+                Cloud jobs only when not yet in a state. */}
+            {(m.manualApply || !status) && (
               <div className="p-4 border-t border-foreground/10 flex items-center justify-end gap-2">
                 {m.manualApply ? (
                   <div className="w-full">
-                    <ManualApplyButton jobId={m.id} full />
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                      This site blocks automated applying. Opens in your browser with your tailored CV ready. Uses 1 credit.
-                    </p>
+                    <ManualApplyButton jobId={m.id} full applied={m.appState === "submitted"} />
+                    {m.appState !== "submitted" && (
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        This site blocks automated applying. Opens in your browser with your tailored CV ready. Uses 1 credit.
+                      </p>
+                    )}
+                    {m.appState === "submitted" && (
+                      <p className="text-xs text-muted-foreground mt-2 text-center">
+                        Already applied. Reopen the page to continue or check it. No credit is charged.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <ApplyButton jobId={m.id} />
