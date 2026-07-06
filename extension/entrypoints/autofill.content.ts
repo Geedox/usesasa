@@ -28,6 +28,17 @@ const ATS_HOST_RE = /(greenhouse|lever\.co|ashbyhq|ashby|workable|smartrecruiter
 // login / newsletter / shopping page is worse than missing the odd job page. So we
 // only show on a pure ATS host, a schema.org JobPosting, a resume upload, or when at
 // least TWO independent job signals agree.
+// True if this frame currently shows a fillable form control (text/textarea/select/
+// contenteditable). Lets us tell an application-form view apart from a job overview
+// or description tab, so the widget can prompt the user to open the application.
+function hasFormFields(): boolean {
+  const sel =
+    'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]):not([type=search]), textarea, select, [contenteditable="true"], [contenteditable=""]';
+  return Array.from(document.querySelectorAll<HTMLElement>(sel)).some(
+    (el) => el.offsetParent !== null && !el.closest("#sasa-autofill-root"),
+  );
+}
+
 function looksLikeJobPage(): boolean {
   const host = location.hostname;
   if (ATS_HOST_RE.test(host)) return true;
@@ -171,9 +182,13 @@ export default defineContentScript({
     // may live in an iframe, so all frames participate).
     chrome.runtime.onMessage.addListener((msg: { type?: string; input?: FillInputMsg; answers?: Record<string, string> }, _sender, sendResponse) => {
       if (msg?.type === "sasaFill" && msg.input) {
+        // Observe the page first: only frames that actually show an application form
+        // participate. A job-overview/description frame reports "no_form" so the widget
+        // can tell the user to open the application instead of silently doing nothing.
+        if (!hasFormFields()) { sendResponse({ result: "no_form" }); return false; }
         fillAndSubmit(msg.input, { submitSelectors: [], submitTextRe: /apply|submit/i, noSubmit: true })
-          .then(sendResponse)
-          .catch(() => sendResponse({ result: "failed" }));
+          .then((r) => sendResponse({ ...r, formFound: true }))
+          .catch(() => sendResponse({ result: "failed", formFound: true }));
         return true; // async
       }
       if (msg?.type === "sasaScan") {
@@ -217,9 +232,25 @@ export default defineContentScript({
   },
 });
 
-// Broadcast a fill payload to every frame in this tab (via the background worker).
-async function broadcastFill(input: FillInputMsg) {
-  await chrome.runtime.sendMessage({ type: "broadcastFill", input });
+type FillOutcome = { ok: boolean; anyForm?: boolean; prefilled?: boolean; reasons?: string[] };
+
+// Broadcast a fill payload to every frame in this tab (via the background worker) and
+// return what actually happened, so callers can give the user real feedback.
+async function broadcastFill(input: FillInputMsg): Promise<FillOutcome> {
+  return ((await chrome.runtime.sendMessage({ type: "broadcastFill", input })) as FillOutcome) ?? { ok: false };
+}
+
+// Turn a fill outcome into a human status line. When no frame had a form, the user is
+// on the overview/description — tell them to open the application. When required
+// fields remain, name them.
+function fillStatus(res: FillOutcome, okMsg: string): string {
+  if (!res?.anyForm) return "No application form on this view yet. Click Apply on the page to open the form, then try again.";
+  const needed = [...new Set((res.reasons ?? []).filter((r) => /required field/i.test(r)))];
+  if (needed.length) {
+    const labels = needed.join(" ").replace(/^\d+ required field\(s\)[^:]*:\s*/i, "");
+    return `Filled most of it. A few required fields still need you: ${labels}`.slice(0, 200);
+  }
+  return okMsg;
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -594,7 +625,12 @@ function mountWidget() {
     };
     if (r.resumeBase64) mk("Download tailored CV", "primary", () => downloadBase64Pdf(r.resumeBase64!, r.resumeName || "cv.pdf"));
     if (r.coverLetter) mk("Download cover letter", "ghost", () => downloadBlob(new Blob([r.coverLetter], { type: "text/plain" }), "cover-letter.txt"));
-    mk("Fill the form", "ghost", () => { void broadcastFill(r); });
+    mk("Fill the form", "ghost", async () => {
+      busy(true); setStatus("Filling…");
+      try { setStatus(fillStatus(await broadcastFill(r), "Filled with your tailored CV and cover letter. Review and submit.")); }
+      catch { setStatus("Could not fill. Try again."); }
+      finally { busy(false); }
+    });
   };
 
   quickBtn.addEventListener("click", async () => {
@@ -603,13 +639,13 @@ function mountWidget() {
       // If this job was already tailored, fill with the tailored CV + cover letter +
       // answers, not the original profile.
       if (lastReady) {
-        await broadcastFill(lastReady);
-        setStatus("Filled with your tailored CV and cover letter. Review and submit.");
+        const res = await broadcastFill(lastReady);
+        setStatus(fillStatus(res, "Filled with your tailored CV and cover letter. Review and submit."));
       } else {
         const data = (await chrome.runtime.sendMessage({ type: "prefillData" })) as PrefillData;
         if (!data?.connected || !data.fields) { setStatus("Open the Sasa popup to connect."); return; }
-        await broadcastFill({ fields: data.fields, coverLetter: "", answers: {}, resumeBase64: data.resumeBase64 ?? null, resumeName: data.resumeName ?? "cv.pdf" });
-        setStatus("Filled with your base CV. Tip: tap 'Tailor to this job' for a CV and cover letter matched to this role.");
+        const res = await broadcastFill({ fields: data.fields, coverLetter: "", answers: {}, resumeBase64: data.resumeBase64 ?? null, resumeName: data.resumeName ?? "cv.pdf" });
+        setStatus(fillStatus(res, "Filled with your base CV. Tip: tap 'Tailor to this job' for a CV and cover letter matched to this role."));
       }
     } catch { setStatus("Could not fill. Try again."); }
     finally { busy(false); }

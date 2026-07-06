@@ -43,6 +43,26 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+// Fill a contenteditable rich-text editor (Draft.js/Quill/ProseMirror) through its
+// own input pipeline; direct textContent assignment is ignored by these editors.
+function setEditable(el: HTMLElement, value: string) {
+  el.focus();
+  const sel = window.getSelection();
+  if (sel) { const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r); }
+  let ok = false;
+  try { ok = document.execCommand("insertText", false, value); } catch { ok = false; }
+  if (!ok) {
+    el.textContent = value;
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  }
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.blur();
+}
+const editables = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"], [contenteditable=""]')).filter(
+    (el) => visible(el) && el.getAttribute("aria-hidden") !== "true" && !el.closest("#sasa-autofill-root"),
+  );
+
 export function scanQuestions(): ScannedQuestion[] {
   const out: ScannedQuestion[] = [];
   const seen = new Set<string>();
@@ -89,6 +109,12 @@ export function scanQuestions(): ScannedQuestion[] {
     if (label && !isStd(el, label)) add({ label, type: "checkbox" });
   }
 
+  // rich-text editors (contenteditable) — long-answer questions on Workable/Lever etc.
+  for (const el of editables()) {
+    const label = labelFor(el);
+    if (label && !isStd(el, label)) add({ label, type: "textarea" });
+  }
+
   return out;
 }
 
@@ -121,6 +147,12 @@ export function applyAnswers(answers: Record<string, string>): number {
         if (!(el as HTMLInputElement).checked) { (el as HTMLInputElement).click(); n++; }
       }
     }
+  }
+
+  // contenteditable rich-text editors
+  for (const el of editables()) {
+    const value = byLabel.get(labelFor(el).toLowerCase());
+    if (value) { setEditable(el, value); n++; }
   }
   return n;
 }
