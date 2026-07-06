@@ -20,6 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href={`${BASE}/transactions`} className="text-muted-foreground hover:text-foreground">Transactions</Link>
             <Link href={`${BASE}/usage`} className="text-muted-foreground hover:text-foreground">LLM usage</Link>
             <Link href={`${BASE}/feedback`} className="text-muted-foreground hover:text-foreground">Feedback</Link>
+            <Link href={`${BASE}/referral-credit`} className="text-muted-foreground hover:text-foreground">Referral credit</Link>
             <Link href={`${BASE}/applications`} className="text-muted-foreground hover:text-foreground">Mentor applications</Link>
             <Link href={`${BASE}/mentors`} className="text-muted-foreground hover:text-foreground">Mentors</Link>
             <Link href={`${BASE}/bookings`} className="text-muted-foreground hover:text-foreground">Bookings</Link>
