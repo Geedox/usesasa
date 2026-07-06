@@ -11,15 +11,18 @@ import { notifyCreditsChanged } from "@/components/dashboard/credits-badge";
 // Apply in the user's own browser: confirms the 1-credit charge, then opens a blank
 // tab synchronously (so the popup blocker allows it), charges, and points the tab at
 // the job link. Used for aggregator / bot-walled jobs the cloud browser can't reach.
-export function ManualApplyButton({ jobId, full = false }: { jobId: string; full?: boolean }) {
+export function ManualApplyButton({ jobId, full = false, applied = false }: { jobId: string; full?: boolean; applied?: boolean }) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [applied, setApplied] = useState(false);
+  const [localApplied, setLocalApplied] = useState(false);
   const [noCredit, setNoCredit] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Runs from the confirm button click (a user gesture), so window.open is allowed.
+  const isApplied = applied || localApplied;
+
+  // Runs from a user gesture, so window.open is allowed. For an already-applied job the
+  // endpoint returns the URL WITHOUT charging again, so "Open job" is free to reopen.
   const proceed = async () => {
     setBusy(true);
     setErr(null);
@@ -34,7 +37,7 @@ export function ManualApplyButton({ jobId, full = false }: { jobId: string; full
       if (res.ok && j.url) {
         if (win) win.location.href = j.url;
         else window.open(j.url, "_blank");
-        setApplied(true);
+        setLocalApplied(true);
         setConfirmOpen(false);
         notifyCreditsChanged();
         router.refresh();
@@ -63,15 +66,32 @@ export function ManualApplyButton({ jobId, full = false }: { jobId: string; full
     );
   }
 
+  // Already applied: reopen the job link, no charge.
+  if (isApplied) {
+    return (
+      <div className={full ? "w-full" : ""}>
+        <button
+          onClick={proceed}
+          disabled={busy}
+          title="Reopen the job page. No credit is charged."
+          className={`inline-flex items-center justify-center gap-1.5 rounded-lg border border-foreground/15 px-4 py-1.5 text-sm cursor-pointer hover:border-foreground/40 disabled:opacity-60 ${full ? "w-full" : ""}`}
+        >
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
+          Open job
+        </button>
+        {err && <p className="text-xs text-rose-600 mt-1">{err}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className={full ? "w-full" : ""}>
       <button
         onClick={() => setConfirmOpen(true)}
-        disabled={applied}
         className={`inline-flex items-center justify-center gap-1.5 rounded-lg bg-foreground text-background px-4 py-1.5 text-sm cursor-pointer hover:bg-foreground/90 disabled:opacity-80 ${full ? "w-full" : ""}`}
       >
-        {applied ? null : <ExternalLink className="w-3.5 h-3.5" />}
-        {applied ? "Applied" : "Apply in browser"}
+        <ExternalLink className="w-3.5 h-3.5" />
+        Apply in browser
       </button>
       {err && <p className="text-xs text-rose-600 mt-1">{err}</p>}
 

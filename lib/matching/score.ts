@@ -109,6 +109,26 @@ function blurbPrefsFor(prefs: PrefRow): BlurbPrefs {
   };
 }
 
+// Pull location / eligibility restrictions out of the FULL job description (not just
+// the truncated slice the model reads), so a buried "must be based in Turkey" or
+// "US citizens only" is surfaced to the scorer. Aggregator location fields often say
+// "Remote" while the real geo restriction is deep in the post.
+const RESTRICTION_RE =
+  /\b(only|based in|located in|reside\b|residents? of|citizens? of|nationals? of|authoriz(?:ed|ation) to work|eligible to work|right to work|work permit|must be (?:in|located|based|a resident)|candidates? (?:in|from|located|based)|located within|within (?:the )?[A-Z][a-z]|time ?zone|overlap with|no (?:visa )?sponsor|do(?:es)? not (?:offer |provide )?sponsor|onsite in|hybrid in|relocat|clearance)/i;
+
+function restrictionHints(rawJd: string): string {
+  if (!rawJd) return "";
+  const parts = rawJd.replace(/\s+/g, " ").split(/(?<=[.!?;])\s+|•|\|/);
+  const hits: string[] = [];
+  for (const p of parts) {
+    const t = p.trim();
+    if (t.length < 8 || t.length > 220) continue;
+    if (RESTRICTION_RE.test(t) && !hits.includes(t)) hits.push(t);
+    if (hits.length >= 4) break;
+  }
+  return hits.join(" | ").slice(0, 600);
+}
+
 // Score a batch of jobs in one Haiku call. Returns one result per input job,
 // in order. Falls back to score 0 for any the model omits.
 async function scoreBatch(
@@ -117,7 +137,10 @@ async function scoreBatch(
   batch: { title: string; location: string; rawJd: string }[],
 ): Promise<ScoreResult[]> {
   const jobList = batch
-    .map((j, i) => `[${i}] ${j.title} — ${j.location}\n${j.rawJd.slice(0, 1200)}`)
+    .map((j, i) => {
+      const hints = restrictionHints(j.rawJd);
+      return `[${i}] ${j.title} — ${j.location}${hints ? `\nLocation/eligibility notes (from the full post): ${hints}` : ""}\n${j.rawJd.slice(0, 1400)}`;
+    })
     .join("\n\n---\n\n");
 
   const msg = await anthropic.messages.create({
@@ -136,9 +159,9 @@ First infer the candidate's FUNCTION (e.g. software engineering, data, design, p
 
 Do NOT inflate scores for "adjacent" or "transferable" roles in a different function. Be honest. Most roles are not strong fits, and a wrong-function role must score below 35 even if the company or buzzwords look appealing.
 
-WORK AUTHORIZATION (critical): the candidate's authorized locations are in the profile above. If a job REQUIRES citizenship or work authorization the candidate does NOT have and it does NOT offer sponsorship (e.g. "US citizens only", "must be authorized to work in the US", "requires active security clearance", a country-specific onsite role the candidate can't work in), score it 20 or below no matter how well the skills match. Roles that are remote-worldwide, based in a region the candidate is authorized in, or that explicitly sponsor visas are fine.
+WORK AUTHORIZATION AND LOCATION (critical): read the "Location/eligibility notes" line for each job VERY carefully, and the location and the full post. Many roles say "Remote" but restrict WHERE you may be based (e.g. "Remote, Turkey only", "must be based in the US", "residents of the EU", a specific timezone, or an onsite/hybrid location). If a job requires the candidate to be based in, be a citizen/resident of, or be authorized in a place the candidate is NOT authorized for (per the profile), and it does not offer sponsorship, score it 20 or below no matter how well the skills match, and say so in the reason. Only "remote worldwide", roles based in a region the candidate is authorized in, or roles that sponsor visas are truly remote for this candidate.
 
-Also give each job a short "tag" (1-4 words) describing its location/eligibility, e.g. "Remote", "Remote (US only)", "US only", "US citizens only", "EU only", "Onsite Lagos", "Hybrid", "Sponsors visa", "Needs clearance". If nothing is stated, use "Remote" or the city.
+Also give each job a short "tag" (1-5 words) that reflects the REAL location/eligibility, not just the word "Remote". Examples: "Remote worldwide", "Remote, Turkey only", "Remote, US only", "US citizens only", "EU only", "Onsite Lagos", "Hybrid", "Sponsors visa", "Needs clearance". If the post restricts to a country/region, the tag MUST name it.
 
 Return ONLY a JSON array, one object per job, in the same order:
 [{"i": <index>, "score": <0-100>, "reason": "<one sentence>", "tag": "<short tag>"}]

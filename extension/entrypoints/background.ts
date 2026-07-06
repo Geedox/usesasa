@@ -235,12 +235,31 @@ export default defineBackground(() => {
       })();
       return true; // async
     }
-    // Fan a fill payload out to every frame in the tab (the form may be in an iframe).
+    // Fan a fill payload out to every frame in the tab (the form may be in an iframe),
+    // then aggregate: did any frame actually have an application form, and which
+    // required fields still need the user? The widget uses this to give real feedback
+    // (e.g. "open the application first") instead of a blind "filled".
     if (msg?.type === "broadcastFill") {
-      const tabId = _sender.tab?.id;
-      if (tabId != null) chrome.tabs.sendMessage(tabId, { type: "sasaFill", input: msg.input }).catch(() => {});
-      sendResponse({ ok: true });
-      return true;
+      (async () => {
+        const tabId = _sender.tab?.id;
+        if (tabId == null) return sendResponse({ ok: false });
+        let frames: { frameId: number }[] = [];
+        try { frames = (await chrome.webNavigation.getAllFrames({ tabId })) ?? []; } catch { frames = [{ frameId: 0 }]; }
+        if (frames.length === 0) frames = [{ frameId: 0 }];
+        const results = await Promise.all(
+          frames.map((f) =>
+            chrome.tabs
+              .sendMessage(tabId, { type: "sasaFill", input: msg.input }, { frameId: f.frameId })
+              .catch(() => ({ result: "failed" as const })),
+          ),
+        );
+        const r = results as { result?: string; reason?: string; formFound?: boolean }[];
+        const anyForm = r.some((x) => x?.formFound);
+        const prefilled = r.some((x) => x?.result === "prefilled");
+        const reasons = r.filter((x) => x?.result === "needs_user" && x.reason).map((x) => x.reason as string);
+        sendResponse({ ok: true, anyForm, prefilled, reasons });
+      })();
+      return true; // async
     }
     // Universal widget: queue tailoring for the scraped job, return the app id.
     if (msg?.type === "tailorAdhoc") {

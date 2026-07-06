@@ -43,6 +43,33 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+// Fill a rich-text / contenteditable editor (Workable, Lever, Draft.js, Quill,
+// ProseMirror). These editors keep their own internal model, so a direct
+// innerText/textContent assignment is silently discarded. Routing the text through
+// execCommand("insertText") drives the editor's own input pipeline; we fall back to
+// a beforeinput/input pair for editors that reject execCommand.
+function setContentEditable(el: HTMLElement, value: string) {
+  el.scrollIntoView({ block: "center" });
+  el.focus();
+  const sel = window.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.selectNodeContents(el); // replace any existing content
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  let ok = false;
+  try { ok = document.execCommand("insertText", false, value); } catch { ok = false; }
+  if (!ok) {
+    el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertReplacementText", data: value }));
+    el.textContent = value;
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+  }
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.blur();
+}
+const editableFilled = (el: HTMLElement) => clean(el.textContent).length > 0;
+
 function base64ToFile(b64: string, name: string): File {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -327,6 +354,13 @@ export async function fillAndSubmit(input: FillInput, opts: FillOptions): Promis
     return isVisible(el);
   });
 
+  // Rich-text editors used for cover letters / long answers (Workable, Lever, and
+  // anything built on Draft.js/Quill/ProseMirror) are contenteditable, not <textarea>,
+  // so they never appear in `all`. Collect them separately and fill them too.
+  const editables = Array.from(document.querySelectorAll<HTMLElement>('[contenteditable="true"], [contenteditable=""]')).filter(
+    (el) => isVisible(el) && el.getAttribute("aria-hidden") !== "true" && !el.closest("#sasa-autofill-root"),
+  );
+
   const handled = new Set<Element>();
   let resumeAttached = false;
   const filled: string[] = [];
@@ -398,6 +432,27 @@ export async function fillAndSubmit(input: FillInput, opts: FillOptions): Promis
       knownFills.push({ el, value });
       handled.add(el);
       await delay(actionDelay());
+    }
+  }
+
+  // Phase A2: rich-text cover-letter editor (contenteditable). Classified the same
+  // way as a textarea; filled through the editor's own input pipeline.
+  for (const el of editables) {
+    if (handled.has(el)) continue;
+    const role = classifyField({
+      name: el.getAttribute("name") ?? "",
+      id: el.id,
+      label: standaloneLabel(el),
+      type: "textarea",
+      placeholder: el.getAttribute("aria-label") ?? el.getAttribute("data-placeholder") ?? "",
+      autocomplete: "",
+    });
+    if (role === "coverLetter") {
+      if (input.coverLetter && !editableFilled(el)) {
+        setContentEditable(el, input.coverLetter);
+        filled.push("coverLetter");
+      }
+      handled.add(el);
     }
   }
 
@@ -544,6 +599,19 @@ export async function fillAndSubmit(input: FillInput, opts: FillOptions): Promis
         label: () => fieldLabel,
       });
     }
+  }
+
+  // Leftover rich-text editors (contenteditable long-answer questions) → textareas.
+  for (const el of editables) {
+    if (handled.has(el)) continue;
+    if (editableFilled(el)) { handled.add(el); continue; }
+    addQ(standaloneLabel(el), "textarea", undefined, {
+      required: isRequired(el),
+      fill: (v) => setContentEditable(el, v),
+      isFilled: () => editableFilled(el),
+      label: () => standaloneLabel(el),
+    });
+    handled.add(el);
   }
 
   // Only ask about REQUIRED questions (leave optional fields, e.g. demographics, alone).
