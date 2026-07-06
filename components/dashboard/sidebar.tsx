@@ -32,10 +32,12 @@ const nav = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
-const channels = [
+const EXTENSION_URL = "https://chromewebstore.google.com/detail/sasa/pcpbinadolndiebjjoidnjbnmkfjllif";
+
+const channels: { name: string; icon: typeof MessageCircle; href?: string; external?: boolean }[] = [
   { name: "WhatsApp", icon: MessageCircle },
-  { name: "Chrome", icon: Chrome },
-  { name: "Telegram", icon: Send },
+  { name: "Chrome", icon: Chrome, href: EXTENSION_URL, external: true },
+  { name: "Telegram", icon: Send, href: "/dashboard/settings?tab=integrations" },
 ];
 
 export function DashboardSidebar({
@@ -97,18 +99,27 @@ export function DashboardSidebar({
           Channels
         </p>
         <div className="grid grid-cols-3 gap-2">
-          {channels.map((c) => (
-            <div
-              key={c.name}
-              title={c.name}
-              className="flex flex-col items-center gap-1 rounded-lg border border-foreground/10 py-3 text-muted-foreground"
-            >
-              <c.icon className="w-4 h-4" />
-              <span className="text-[10px] leading-tight text-center">
-                {c.name}
-              </span>
-            </div>
-          ))}
+          {channels.map((c) => {
+            const cls = "flex flex-col items-center gap-1 rounded-lg border border-foreground/10 py-3 text-muted-foreground";
+            const inner = (
+              <>
+                <c.icon className="w-4 h-4" />
+                <span className="text-[10px] leading-tight text-center">{c.name}</span>
+              </>
+            );
+            if (!c.href) return <div key={c.name} title={c.name} className={cls}>{inner}</div>;
+            return (
+              <a
+                key={c.name}
+                href={c.href}
+                {...(c.external ? { target: "_blank", rel: "noreferrer" } : {})}
+                title={c.name}
+                className={`${cls} hover:text-foreground hover:border-foreground/30 transition-colors cursor-pointer`}
+              >
+                {inner}
+              </a>
+            );
+          })}
         </div>
       </div>
 
