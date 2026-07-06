@@ -336,6 +336,11 @@ function mountWidget() {
   embChk.addEventListener("change", () => { reflectEmb(); chrome.storage?.local.set({ sasaEmbellish: embChk.checked }); });
   const busy = (on: boolean) => { tailorBtn.disabled = on; quickBtn.disabled = on; suggestBtn.disabled = on; draftBtn.disabled = on; markBtn.disabled = on; };
 
+  // The tailored result for the CURRENT job, once ready (tailored CV + cover letter +
+  // answers). Quick fill uses this when present so it fills the tailored CV, not the
+  // original. Reset when the active job changes (see checkExisting).
+  let lastReady: ({ ready: true } & FillInputMsg) | null = null;
+
   // Show the detected job so the user can confirm the widget mapped the right one.
   // (Click to re-detect on SPA pages that swap the role without a reload.)
   const jobEl = card.querySelector<HTMLDivElement>("#job")!;
@@ -577,6 +582,7 @@ function mountWidget() {
 
   // Render Download CV / Download cover / Fill once tailoring is ready.
   const renderResult = (r: { ready: true } & FillInputMsg) => {
+    lastReady = r; // Quick fill now uses the tailored CV + cover + answers.
     resultsEl.innerHTML = "";
     const mk = (label: string, cls: string, onClick: () => void) => {
       const b = document.createElement("button");
@@ -594,10 +600,17 @@ function mountWidget() {
   quickBtn.addEventListener("click", async () => {
     busy(true); setStatus("Filling…");
     try {
-      const data = (await chrome.runtime.sendMessage({ type: "prefillData" })) as PrefillData;
-      if (!data?.connected || !data.fields) { setStatus("Open the Sasa popup to connect."); return; }
-      await broadcastFill({ fields: data.fields, coverLetter: "", answers: {}, resumeBase64: data.resumeBase64 ?? null, resumeName: data.resumeName ?? "cv.pdf" });
-      setStatus("Filled. Review and submit.");
+      // If this job was already tailored, fill with the tailored CV + cover letter +
+      // answers, not the original profile.
+      if (lastReady) {
+        await broadcastFill(lastReady);
+        setStatus("Filled with your tailored CV and cover letter. Review and submit.");
+      } else {
+        const data = (await chrome.runtime.sendMessage({ type: "prefillData" })) as PrefillData;
+        if (!data?.connected || !data.fields) { setStatus("Open the Sasa popup to connect."); return; }
+        await broadcastFill({ fields: data.fields, coverLetter: "", answers: {}, resumeBase64: data.resumeBase64 ?? null, resumeName: data.resumeName ?? "cv.pdf" });
+        setStatus("Filled with your base CV. Tip: tap 'Tailor to this job' for a CV and cover letter matched to this role.");
+      }
     } catch { setStatus("Could not fill. Try again."); }
     finally { busy(false); }
   });
@@ -627,7 +640,7 @@ function mountWidget() {
     lastLookupUrl = url;
     try {
       const look = (await chrome.runtime.sendMessage({ type: "tailorLookup", url })) as TailorLookupMsg;
-      if (!look?.found) { resultsEl.innerHTML = ""; tailorBtn.textContent = "Tailor to this job (1 credit)"; return; }
+      if (!look?.found) { resultsEl.innerHTML = ""; tailorBtn.textContent = "Tailor to this job (1 credit)"; lastReady = null; return; }
       tailorBtn.textContent = "Re-tailor (1 credit)";
       if (look.ready) setStatus("Already tailored for this job. Download or fill below.");
       else setStatus("Tailoring this job is in progress. It will be ready shortly.");
