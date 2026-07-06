@@ -341,7 +341,7 @@ export const anthropicUsage = pgTable("anthropic_usage", {
 export const feedback = pgTable("feedback", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  category: text("category"), // "idea" | "bug" | "praise" | "other"
+  category: text("category"), // "idea" | "bug" | "praise" | "pricing" | "other"
   message: text("message").notNull(),
   page: text("page"), // where they were when they sent it
   handledAt: timestamp("handled_at", { withTimezone: true }), // set when an admin marks it reviewed
