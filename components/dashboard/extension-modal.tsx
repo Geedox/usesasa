@@ -6,7 +6,9 @@ import { Chrome } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-const DISMISS_KEY = "sasa_extension_modal_dismissed";
+// Bumped to _v2 so users who dismissed the earlier "Coming soon" version see this
+// updated "Add to Chrome" modal once (the extension is now live on the Web Store).
+const DISMISS_KEY = "sasa_extension_modal_dismissed_v2";
 const EXTENSION_URL =
   process.env.NEXT_PUBLIC_EXTENSION_URL ||
   "https://chromewebstore.google.com/detail/sasa/pcpbinadolndiebjjoidnjbnmkfjllif";
