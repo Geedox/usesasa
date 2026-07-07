@@ -186,7 +186,24 @@ export default defineContentScript({
         // participate. A job-overview/description frame reports "no_form" so the widget
         // can tell the user to open the application instead of silently doing nothing.
         if (!hasFormFields()) { sendResponse({ result: "no_form" }); return false; }
-        fillAndSubmit(msg.input, { submitSelectors: [], submitTextRe: /apply|submit/i, noSubmit: true })
+        fillAndSubmit(msg.input, {
+          submitSelectors: [],
+          submitTextRe: /apply|submit/i,
+          noSubmit: true,
+          // Answer custom questions (salary, notice period, currency, years of
+          // experience, eligibility…) from the user's profile + onboarding details.
+          // Without this the universal widget filled only the mapped fields and left
+          // every custom question blank.
+          requestAnswers: async (questions) => {
+            const job = scrapeJob();
+            const resp = (await chrome.runtime.sendMessage({
+              type: "fillAnswers",
+              questions,
+              context: { title: job.title, company: job.company, jd: job.jd },
+            })) as { answers?: Record<string, string> } | undefined;
+            return resp?.answers ?? {};
+          },
+        })
           .then((r) => sendResponse({ ...r, formFound: true }))
           .catch(() => sendResponse({ result: "failed", formFound: true }));
         return true; // async

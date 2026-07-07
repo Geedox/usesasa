@@ -23,7 +23,11 @@ export async function canUseSasa(userId: string): Promise<{ ok: true } | { ok: f
   if (await isSuspended(userId)) return { ok: false, error: SUSPENDED_MESSAGE };
   if (await isSubscriber(userId)) {
     const ent = await getEntitlement(userId);
-    return ent.remaining > 0 ? { ok: true } : { ok: false, error: PLAN_LIMIT_MESSAGE };
+    if (ent.remaining > 0) return { ok: true };
+    // Plan allowance used up for the cycle: fall back to any credits the user holds
+    // (e.g. signup bonus or a top-up) before blocking, so held credits are never dead.
+    if ((await getBalance(userId)) >= 1) return { ok: true };
+    return { ok: false, error: PLAN_LIMIT_MESSAGE };
   }
   return (await getBalance(userId)) >= 1 ? { ok: true } : { ok: false, error: NO_CREDIT_MESSAGE };
 }
@@ -34,7 +38,8 @@ export async function canUseSasa(userId: string): Promise<{ ok: true } | { ok: f
 // Subscribers are only gated when their plan allowance is used up.
 export async function belowCreditFloor(userId: string, floor = 1): Promise<boolean> {
   if (await isSubscriber(userId)) {
-    return (await getEntitlement(userId)).remaining <= 0;
+    // Only nag once the plan allowance AND any fallback credits are exhausted.
+    return (await getEntitlement(userId)).remaining <= 0 && (await getBalance(userId)) <= 0;
   }
   return (await getBalance(userId)) <= floor;
 }
