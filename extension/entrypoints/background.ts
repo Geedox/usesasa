@@ -371,6 +371,25 @@ export default defineBackground(() => {
       })();
       return true; // async
     }
+    // Universal widget fill: answer custom questions with no application (uses the
+    // scraped page as context + the user's profile/onboarding details). This is what
+    // fills salary, notice period, currency, years of experience, etc. during Quick
+    // fill / Fill — the same data the user gave at onboarding.
+    if (msg?.type === "fillAnswers") {
+      (async () => {
+        const cfg = await getConfig();
+        if (!cfg.token) return sendResponse({ answers: {} });
+        const ctx = (msg.context as { title?: string; company?: string; jd?: string }) ?? {};
+        const { answers } = await suggestAnswers(cfg, {
+          questions: msg.questions as AnswerQuestion[],
+          title: ctx.title,
+          company: ctx.company,
+          jd: ctx.jd,
+        });
+        sendResponse({ answers: answers ?? {} });
+      })();
+      return true; // async
+    }
     return undefined;
   });
 });
